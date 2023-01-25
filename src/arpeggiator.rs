@@ -4,6 +4,10 @@ use wmidi::{Note, MidiMessage, Velocity, Channel};
 use crate::midi;
 use crate::arpeggio::{Arpeggio, Player, Step};
 
+pub trait Arpeggiator {
+    fn listen(&mut self);
+}
+
 pub struct RepeatRecorder {
     midi_in: midi::InputDevice,
     midi_out: midi::OutputDevice,
@@ -22,8 +26,10 @@ impl RepeatRecorder {
             last_note_off: None
         }
     }
+}
 
-    pub fn listen(&mut self) {
+impl Arpeggiator for RepeatRecorder {
+    fn listen(&mut self) {
         for received in &self.midi_in.receiver {
             match received {
                 MidiMessage::NoteOn(c, n, v) => {
