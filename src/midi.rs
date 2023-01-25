@@ -10,6 +10,10 @@ pub struct InputDevice {
     pub receiver: mpsc::Receiver<MidiMessage<'static>>
 }
 
+pub struct ClockDevice {
+    pub ticker: mpsc::Receiver<u8>
+}
+
 pub struct OutputDevice {
     pub sender: mpsc::Sender<MidiMessage<'static>>
 }
@@ -45,9 +49,36 @@ impl InputDevice {
                     bytes.clear();
                 }
             }
-            
         }
         println!("NOTE: Input device is not connected.");
+    }
+}
+
+
+impl ClockDevice {
+    const MIDI_TICK: u8 = 0xF8;
+    
+    pub fn open(midi_clock: &str) -> Result<Self, Box<dyn Error>> {
+        let (tx, rx) = mpsc::channel();
+        let mut input = fs::File::options().read(true).open(midi_clock).map_err(|e| format!("Cannot open MIDI CLOCK '{}': {}", midi_clock, e))?;
+        thread::Builder::new().name(format!("midi-clock")).spawn(move || Self::read_clocks_into_queue(&mut input, tx))?;
+        Ok(Self {
+            ticker: rx
+        })
+    }
+
+    fn read_clocks_into_queue(f: &mut fs::File, tx: mpsc::Sender<u8>) {
+        let mut buf: [u8; 1] = [0; 1];
+        while f.read_exact(&mut buf).is_ok() {
+            if buf[0] == Self::MIDI_TICK {
+                // tick detected, send to queue
+                if tx.send(Self::MIDI_TICK).is_err() {
+                    panic!("Error sending to queue.");
+                }
+            }
+            
+        }
+        println!("NOTE: Clock device is not connected.");
     }
 }
 
