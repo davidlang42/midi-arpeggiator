@@ -3,6 +3,7 @@ use std::fs;
 use std::thread;
 use std::io::{Read, Write};
 use std::error::Error;
+use wmidi::FromBytesError;
 use wmidi::MidiMessage;
 
 pub struct InputDevice {
@@ -25,11 +26,26 @@ impl InputDevice {
 
     fn read_into_queue(f: &mut fs::File, tx: mpsc::Sender<MidiMessage>) {
         let mut buf: [u8; 1] = [0; 1];
+        let mut bytes = Vec::new();
         while f.read_exact(&mut buf).is_ok() {
-            todo!();
-            // if tx.send(buf[0]).is_err() {
-            //     panic!("Error writing to queue.");
-            // }
+            bytes.push(buf[0]);
+            match MidiMessage::try_from(bytes.as_slice()) {
+                Ok(message) => {
+                    // message complete, send to queue
+                    if tx.send(message.to_owned()).is_err() {
+                        panic!("Error sending to queue.");
+                    }
+                    bytes.clear();
+                },
+                Err(FromBytesError::NoBytes) | Err(FromBytesError::NoSysExEndByte) | Err(FromBytesError::NotEnoughBytes) => {
+                    // wait for more bytes
+                }, 
+                _ => {
+                    // invalid message, clear and wait for next message
+                    bytes.clear();
+                }
+            }
+            
         }
         println!("NOTE: Input device is not connected.");
     }
