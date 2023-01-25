@@ -4,7 +4,7 @@ use wmidi::{Note, MidiMessage, Velocity, Channel};
 use crate::midi;
 use crate::arpeggio::{Arpeggio, Player, Step};
 
-pub struct Arpeggiator {
+pub struct RepeatRecorder {
     midi_in: midi::InputDevice,
     midi_out: midi::OutputDevice,
     arpeggios: HashMap<Note, Player>,
@@ -12,7 +12,7 @@ pub struct Arpeggiator {
     last_note_off: Option<(Note, Instant, Channel, Velocity)>
 }
 
-impl Arpeggiator {
+impl RepeatRecorder {
     pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice) -> Self {
         Self {
             midi_in,
