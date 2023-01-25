@@ -2,6 +2,7 @@ use std::env;
 use std::error::Error;
 
 mod midi;
+mod arpeggio;
 mod arpeggiator;
 
 fn main() -> Result<(), Box<dyn Error>> {
