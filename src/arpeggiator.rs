@@ -118,8 +118,16 @@ pub struct Arpeggio {
 
 impl fmt::Display for Arpeggio {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let notes: Vec<String> = self.steps.iter().map(|s| format!("{}", s)).collect(); //TODO avoid this allocation
-        write!(f, "{}@{:0.0}bpm", notes.join(","), self.bpm())
+        match self.steps.len() {
+            0 => write!(f, "-")?,
+            len => {
+                write!(f, "{}", self.steps[0])?;
+                for i in 1..len {
+                    write!(f, ",{}", self.steps[i])?;
+                }
+            }
+        }
+        write!(f, "@{:0.0}bpm", self.bpm())
     }
 }
 
@@ -154,11 +162,16 @@ pub struct Step {
 
 impl fmt::Display for Step {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.notes.len() == 1 {
-            write!(f, "{}", self.notes[0].1)
-        } else {
-            let notes: Vec<String> = self.notes.iter().map(|n| format!("{}", n.1)).collect(); //TODO avoid this allocation
-            write!(f, "[{}]", notes.join(","))
+        match self.notes.len() {
+            0 => write!(f, "[]"),
+            1 => write!(f, "{}", self.notes[0].1),
+            len => {
+                write!(f, "[{}", self.notes[0].1)?;
+                for i in 1..len {
+                    write!(f, ",{}", self.notes[i].1)?;
+                }
+                write!(f, "]")
+            }
         }
     }
 }
