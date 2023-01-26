@@ -1,19 +1,21 @@
 use std::collections::HashMap;
-use std::time::{Instant, Duration};
-use wmidi::{Note, MidiMessage, Velocity, Channel};
+use std::mem;
+use std::time::Instant;
+use wmidi::{Note, MidiMessage, ControlFunction};
 use crate::midi;
-use crate::arpeggio::{Arpeggio, Player, Step};
+use crate::arpeggio::{Arpeggio, Player, NoteDetails};
 
 pub trait Arpeggiator {
     fn listen(&mut self);
+    fn stop_arpeggios(&mut self);
 }
 
 pub struct RepeatRecorder {
     midi_in: midi::InputDevice,
     midi_out: midi::OutputDevice,
+    held_notes: HashMap<Note, (Instant, NoteDetails)>,
+    last_note_off: Option<(Instant, NoteDetails)>,
     arpeggios: HashMap<Note, Player>,
-    held_notes: HashMap<Note, (Instant, Channel, Velocity)>,
-    last_note_off: Option<(Note, Instant, Channel, Velocity)>
 }
 
 impl RepeatRecorder {
@@ -21,9 +23,9 @@ impl RepeatRecorder {
         Self {
             midi_in,
             midi_out,
-            arpeggios: HashMap::new(),
             held_notes: HashMap::new(),
-            last_note_off: None
+            last_note_off: None,
+            arpeggios: HashMap::new()
         }
     }
 }
@@ -33,41 +35,27 @@ impl Arpeggiator for RepeatRecorder {
         for received in &self.midi_in.receiver {
             match received {
                 MidiMessage::NoteOn(c, n, v) => {
-                    match self.last_note_off {
-                        Some((first_n, first_i, first_c, first_v)) if first_n == n => {
-                            let now = Instant::now();
-                            let period = first_i - now;
+                    match &self.last_note_off {
+                        Some((first_i, first)) if first.n == n => {
+                            let finish = Instant::now();
                             //TODO add check that there wasn't a long gap between last note off and this note on
-                            let mut steps = vec![Step {
-                                wait: Duration::from_secs(0),
-                                notes: vec![(first_c, first_n, first_v)]
-                            }];
-                            let mut prev_i = first_i;
-                            let mut notes: Vec<(Note, (Instant, Channel, Velocity))> = self.held_notes.drain().collect();
-                            notes.sort_by(|(_, (a, _, _)), (_, (b, _, _))| a.cmp(b));
-                            for (n, (i, c, v)) in notes {
-                                steps.push(Step {
-                                    wait: i - prev_i,
-                                    notes: vec![(c, n, v)] //TODO handle multiple notes in one step
-                                });
-                                prev_i = i;
-                            }
-                            steps[0].wait = now - prev_i;
-                            let arp = Arpeggio { steps, period };
-                            println!("Starting: {}", arp);
+                            //TODO handle multiple notes in one step
+                            let mut notes: Vec<(Instant, NoteDetails)> = self.held_notes.drain().map(|(_, v)| v).collect();
+                            notes.push((*first_i, *first));
+                            notes.sort_by(|(a, _), (b, _)| a.cmp(&b));
+                            let arp = Arpeggio::from(notes, finish);
                             self.arpeggios.insert(n, Player::start(arp, &self.midi_out).unwrap()); //TODO handle error
                         },
                         _ => {
-                            self.held_notes.insert(n, (Instant::now(), c, v));
+                            self.held_notes.insert(n, (Instant::now(), NoteDetails { c, n, v }));
                         }
                     }
                 },
                 MidiMessage::NoteOff(_, n, _) => {
                     if let Some(mut player) = self.arpeggios.remove(&n) {
-                        println!("Stopping: {}", n);
                         player.stop();
-                    } else if let Some((i, c, v)) = self.held_notes.remove(&n) {
-                        self.last_note_off = Some((n, i, c, v));
+                    } else if let Some(value) = self.held_notes.remove(&n) {
+                        self.last_note_off = Some(value);
                     } else {
                         self.last_note_off = None;
                     }
@@ -75,12 +63,122 @@ impl Arpeggiator for RepeatRecorder {
                 MidiMessage::Reset => {
                     self.held_notes.clear();
                     self.last_note_off = None;
-                    for (_, player) in self.arpeggios.drain() {
-                        player.ensure_stopped().unwrap(); //TODO handle error
-                    }
+                    drain_and_wait_for_stop(&mut self.arpeggios);
                 },
                 _ => {}
             }
         }
+    }
+
+    fn stop_arpeggios(&mut self) {
+        drain_and_wait_for_stop(&mut self.arpeggios);
+    }
+}
+
+pub struct PedalRecorder {
+    midi_in: midi::InputDevice,
+    midi_out: midi::OutputDevice,
+    notes: Vec<(Instant, NoteDetails)>,
+    thru_notes: HashMap<Note, NoteDetails>,
+    last_note_off: Option<Instant>,
+    pedal: bool,
+    arpeggios: HashMap<Note, Player>,
+    recorded: Option<Arpeggio>
+}
+
+impl PedalRecorder {
+    pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice) -> Self {
+        Self {
+            midi_in,
+            midi_out,
+            notes: Vec::new(),
+            thru_notes: HashMap::new(),
+            last_note_off: None,
+            pedal: false,
+            arpeggios: HashMap::new(),
+            recorded: None
+        }
+    }
+}
+
+impl Arpeggiator for PedalRecorder {
+    fn listen(&mut self) {
+        for received in &self.midi_in.receiver {
+            match received {
+                MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
+                    if u8::from(value) >= 64 {
+                        self.pedal = true;
+                        self.recorded = None;
+                        drain_and_stop(&mut self.arpeggios);
+                    } else {
+                        self.pedal = false;
+                        for (_, thru_note) in self.thru_notes.drain() {
+                            if self.midi_out.sender.send(MidiMessage::NoteOff(thru_note.c, thru_note.n, thru_note.v)).is_err() {
+                                panic!("Unable to send to output queue");
+                            }
+                        }
+                        if self.notes.len() > 0 {
+                            let finish = match self.last_note_off {
+                                Some(instant) => instant, //TODO if this is crap, try always using Instant::now, or might have to wait for first time it is triggered
+                                None => Instant::now()
+                            };
+                            let notes = mem::replace(&mut self.notes, Vec::new());
+                            self.recorded = Some(Arpeggio::from(notes, finish));
+                        }
+                    }
+                },
+                MidiMessage::NoteOn(c, n, v) => {
+                    if self.pedal {
+                        if self.midi_out.sender.send(received).is_err() {
+                            panic!("Unable to forward to output queue");
+                        }
+                        let d = NoteDetails { c, n, v };
+                        self.thru_notes.insert(n, d);
+                        self.notes.push((Instant::now(), d));
+                    } else if let Some(arp) = &self.recorded {
+                        let original = arp.first_note();
+                        let new_arp = arp.transpose(original, n);
+                        self.arpeggios.insert(n, Player::start(new_arp, &self.midi_out).unwrap()); //TODO handle error
+                    }
+                },
+                MidiMessage::NoteOff(_, n, _) => {
+                    if self.pedal {
+                        if self.midi_out.sender.send(received).is_err() {
+                            panic!("Unable to forward to output queue");
+                        }
+                        self.thru_notes.remove(&n);
+                        self.last_note_off = Some(Instant::now());
+                    } else if let Some(mut player) = self.arpeggios.remove(&n) {
+                        player.stop();
+                    }
+                },
+                MidiMessage::Reset => {
+                    self.notes.clear();
+                    self.pedal = false;
+                    self.last_note_off = None;
+                    drain_and_wait_for_stop(&mut self.arpeggios);
+                },
+                _ => {}
+            }
+        }
+    }
+
+    fn stop_arpeggios(&mut self) {
+        drain_and_wait_for_stop(&mut self.arpeggios);
+    }
+}
+
+fn drain_and_stop<N>(arpeggios: &mut HashMap<N, Player>) -> Vec<Player> {
+    let mut players = Vec::new();
+    for (_, mut player) in arpeggios.drain() {
+        player.stop();
+        players.push(player);
+    }
+    players
+}
+
+fn drain_and_wait_for_stop<N>(arpeggios: &mut HashMap<N, Player>) {
+    for player in drain_and_stop(arpeggios) {
+        player.ensure_stopped().unwrap(); //TODO handle error
     }
 }
