@@ -80,7 +80,6 @@ pub struct PedalRecorder {
     midi_out: midi::OutputDevice,
     notes: Vec<(Instant, NoteDetails)>,
     thru_notes: HashMap<Note, NoteDetails>,
-    last_note_off: Option<Instant>,
     pedal: bool,
     arpeggios: HashMap<Note, Player>,
     recorded: Option<Arpeggio>
@@ -93,7 +92,6 @@ impl PedalRecorder {
             midi_out,
             notes: Vec::new(),
             thru_notes: HashMap::new(),
-            last_note_off: None,
             pedal: false,
             arpeggios: HashMap::new(),
             recorded: None
@@ -118,12 +116,15 @@ impl Arpeggiator for PedalRecorder {
                             }
                         }
                         if self.notes.len() > 0 {
-                            let finish = match self.last_note_off {
-                                Some(instant) => instant, //TODO if this is crap, try always using Instant::now, or might have to wait for first time it is triggered
-                                None => Instant::now()
-                            };
+                            // save recorded arpeggio
+                            let finish = Instant::now();
                             let notes = mem::replace(&mut self.notes, Vec::new());
                             self.recorded = Some(Arpeggio::from(notes, finish));
+                            // start play in original key
+                            let arp = self.recorded.as_ref().unwrap();
+                            let original = arp.first_note();
+                            let new_arp = arp.transpose(original, original);
+                            self.arpeggios.insert(original, Player::start(new_arp, &self.midi_out).unwrap()); //TODO handle error
                         }
                     }
                 },
@@ -135,6 +136,8 @@ impl Arpeggiator for PedalRecorder {
                         let d = NoteDetails { c, n, v };
                         self.thru_notes.insert(n, d);
                         self.notes.push((Instant::now(), d));
+                    } else if self.arpeggios.contains_key(&n) {
+                        // already playing, do nothing
                     } else if let Some(arp) = &self.recorded {
                         let original = arp.first_note();
                         let new_arp = arp.transpose(original, n);
@@ -147,7 +150,6 @@ impl Arpeggiator for PedalRecorder {
                             panic!("Unable to forward to output queue");
                         }
                         self.thru_notes.remove(&n);
-                        self.last_note_off = Some(Instant::now());
                     } else if let Some(mut player) = self.arpeggios.remove(&n) {
                         player.stop();
                     }
@@ -155,7 +157,6 @@ impl Arpeggiator for PedalRecorder {
                 MidiMessage::Reset => {
                     self.notes.clear();
                     self.pedal = false;
-                    self.last_note_off = None;
                     drain_and_wait_for_stop(&mut self.arpeggios);
                 },
                 _ => {}
