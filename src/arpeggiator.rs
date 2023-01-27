@@ -1,26 +1,25 @@
-use std::collections::HashMap;
-use crate::arpeggio::{Player, Arpeggio};
+use crate::arpeggio::NoteDetails;
 
 pub mod timed;
+pub mod synced;
+
+pub enum Pattern {
+    Down,
+    Up
+    //TODO more patterns: DownUp, UpDown, Random, Out, In, OutIn, InOut
+}
+
+impl Pattern {
+    fn of(&self, mut notes: Vec<NoteDetails>) -> Vec<NoteDetails> {
+        match self {
+            Pattern::Down => notes.sort_by(|a, b| a.n.cmp(&b.n)),
+            Pattern::Up => notes.sort_by(|a, b| b.n.cmp(&a.n)),
+        }
+        notes
+    }
+}
 
 pub trait Arpeggiator {
     fn listen(&mut self);
     fn stop_arpeggios(&mut self);
-}
-
-fn drain_and_stop<N, A: Arpeggio>(arpeggios: &mut HashMap<N, Player<A>>) -> Vec<Player<A>> {
-    let mut players = Vec::new();
-    for (_, mut player) in arpeggios.drain() {
-        player.stop();
-        players.push(player);
-    }
-    players
-}
-
-fn drain_and_wait_for_stop<N, A: Arpeggio>(arpeggios: &mut HashMap<N, Player<A>>) -> Vec<A> {
-    let mut results = Vec::new();
-    for player in drain_and_stop(arpeggios) {
-        results.push(player.ensure_stopped().unwrap()); //TODO handle error
-    }
-    results
 }

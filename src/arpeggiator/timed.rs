@@ -3,16 +3,16 @@ use std::mem;
 use std::time::Instant;
 use wmidi::{Note, MidiMessage, ControlFunction};
 use crate::midi;
-use crate::arpeggio::{NoteDetails, Player};
-use crate::arpeggio::timed::Arpeggio;
-use super::*;
+use crate::arpeggio::NoteDetails;
+use crate::arpeggio::timed::{Arpeggio, Player};
+use super::Arpeggiator;
 
 pub struct RepeatRecorder {
     midi_in: midi::InputDevice,
     midi_out: midi::OutputDevice,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     last_note_off: Option<(Instant, NoteDetails)>,
-    arpeggios: HashMap<Note, Player<Arpeggio>>,
+    arpeggios: HashMap<Note, Player>,
 }
 
 impl RepeatRecorder {
@@ -78,7 +78,7 @@ pub struct PedalRecorder {
     notes: Vec<(Instant, NoteDetails)>,
     thru_notes: HashMap<Note, NoteDetails>,
     pedal: bool,
-    arpeggios: HashMap<Note, Player<Arpeggio>>,
+    arpeggios: HashMap<Note, Player>,
     recorded: Option<Arpeggio>
 }
 
@@ -163,5 +163,20 @@ impl Arpeggiator for PedalRecorder {
 
     fn stop_arpeggios(&mut self) {
         drain_and_wait_for_stop(&mut self.arpeggios);
+    }
+}
+
+fn drain_and_stop<N>(arpeggios: &mut HashMap<N, Player>) -> Vec<Player> {
+    let mut players = Vec::new();
+    for (_, mut player) in arpeggios.drain() {
+        player.stop();
+        players.push(player);
+    }
+    players
+}
+
+fn drain_and_wait_for_stop<N>(arpeggios: &mut HashMap<N, Player>) {
+    for player in drain_and_stop(arpeggios) {
+        player.ensure_stopped().unwrap(); //TODO handle error
     }
 }

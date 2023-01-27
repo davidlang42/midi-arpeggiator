@@ -1,8 +1,12 @@
+use std::any::Any;
+use std::error::Error;
 use std::time::{Duration, Instant};
 use std::sync::{mpsc, Arc, atomic::{AtomicBool, Ordering}};
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::fmt;
 use wmidi::{Note, MidiMessage};
+use crate::midi;
+
 use super::{Step, NoteDetails};
 
 pub struct Arpeggio {
@@ -25,7 +29,7 @@ impl fmt::Display for Arpeggio {
     }
 }
 
-impl super::Arpeggio for Arpeggio {
+impl Arpeggio {
     fn play(&self, midi_out: mpsc::Sender<MidiMessage<'static>>, should_stop: Arc<AtomicBool>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         let mut i = 0;
         println!("Playing: {}", self);
@@ -43,9 +47,7 @@ impl super::Arpeggio for Arpeggio {
         println!("Stopped: {}", self);
         Ok(())
     }
-}
-
-impl Arpeggio {
+    
     fn bpm(&self) -> f64 {
         let beats = self.steps.len() as f64;
         let seconds = self.period.as_secs_f64();
@@ -83,5 +85,33 @@ impl Arpeggio {
             period: self.period,
             steps: self.steps.iter().map(|(d, s)| (*d, s.transpose(half_steps))).collect()
         }
+    }
+}
+
+
+pub struct Player{
+    thread: JoinHandle<Result<(), mpsc::SendError<MidiMessage<'static>>>>,
+    should_stop: Arc<AtomicBool>
+}
+
+impl Player {
+    pub fn start(arpeggio: Arpeggio, midi_out: &midi::OutputDevice) -> Result<Self, Box<dyn Error>> {
+        let sender_cloned = midi_out.sender.clone();
+        let should_stop = Arc::new(AtomicBool::new(false));
+        let should_stop_cloned = Arc::clone(&should_stop);
+        let thread = thread::Builder::new().name(format!("arp:{}", arpeggio)).spawn(move || arpeggio.play(sender_cloned, should_stop_cloned))?;
+        Ok(Self {
+            thread,
+            should_stop
+        })
+    }
+
+    pub fn stop(&mut self) {
+        self.should_stop.store(true, Ordering::Relaxed);
+    }
+
+    pub fn ensure_stopped(mut self) -> Result<(), Box<dyn Any + Send>> {
+        self.stop();
+        Ok(self.thread.join().unwrap().unwrap()) //TODO handle errors
     }
 }
