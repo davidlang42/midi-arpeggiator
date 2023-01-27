@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::arpeggio::GenericPlayer;
+use crate::arpeggio::{Player, Arpeggio};
 
 pub mod timed;
 
@@ -8,7 +8,7 @@ pub trait Arpeggiator {
     fn stop_arpeggios(&mut self);
 }
 
-fn drain_and_stop<N, P: GenericPlayer>(arpeggios: &mut HashMap<N, P>) -> Vec<P> {
+fn drain_and_stop<N, A: Arpeggio>(arpeggios: &mut HashMap<N, Player<A>>) -> Vec<Player<A>> {
     let mut players = Vec::new();
     for (_, mut player) in arpeggios.drain() {
         player.stop();
@@ -17,8 +17,10 @@ fn drain_and_stop<N, P: GenericPlayer>(arpeggios: &mut HashMap<N, P>) -> Vec<P> 
     players
 }
 
-fn drain_and_wait_for_stop<N, P: GenericPlayer>(arpeggios: &mut HashMap<N, P>) {
+fn drain_and_wait_for_stop<N, A: Arpeggio>(arpeggios: &mut HashMap<N, Player<A>>) -> Vec<A> {
+    let mut results = Vec::new();
     for player in drain_and_stop(arpeggios) {
-        player.ensure_stopped().unwrap(); //TODO handle error
+        results.push(player.ensure_stopped().unwrap()); //TODO handle error
     }
+    results
 }

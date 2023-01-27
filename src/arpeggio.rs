@@ -1,12 +1,17 @@
+use std::error::Error;
+use std::sync::Arc;
+use std::sync::atomic::{Ordering, AtomicBool};
+use std::thread::JoinHandle;
 use std::{sync::mpsc, any::Any};
-use std::fmt;
+use std::{fmt, thread};
+use crate::midi;
 use wmidi::{Note, MidiMessage, Velocity, Channel};
 
 pub mod timed;
+pub mod synced;
 
-pub trait GenericPlayer {
-    fn stop(&mut self);
-    fn ensure_stopped(self) -> Result<(), Box<dyn Any + Send>>;
+pub trait Arpeggio: Send + fmt::Display + 'static {
+    fn play(&self, midi_out: mpsc::Sender<MidiMessage<'static>>, should_stop: Arc<AtomicBool>) -> Result<(), mpsc::SendError<MidiMessage<'static>>>;
 }
 
 #[derive(Copy, Clone)]
@@ -37,6 +42,8 @@ impl fmt::Display for Step {
 }
 
 impl Step {
+    pub const EMPTY: Step = Step { notes: Vec::new() };
+
     pub fn send_on(&self, tx: &mpsc::Sender<MidiMessage<'static>>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         for note in &self.notes {
             let message = MidiMessage::NoteOn(note.c, note.n, note.v);
@@ -83,5 +90,34 @@ impl Step {
         Self {
             notes
         }
+    }
+
+pub struct Player<A> {
+    thread: JoinHandle<Result<A, mpsc::SendError<MidiMessage<'static>>>>,
+    should_stop: Arc<AtomicBool>
+}
+
+impl<A: Arpeggio> Player<A> {
+    pub fn start(arpeggio: A, midi_out: &midi::OutputDevice) -> Result<Self, Box<dyn Error>> {
+        let sender_cloned = midi_out.sender.clone();
+        let should_stop = Arc::new(AtomicBool::new(false));
+        let should_stop_cloned = Arc::clone(&should_stop);
+        let thread = thread::Builder::new().name(format!("arp:{}", arpeggio)).spawn(move || {
+            arpeggio.play(sender_cloned, should_stop_cloned)?;
+            Ok(arpeggio)
+        })?;
+        Ok(Self {
+            thread,
+            should_stop
+        })
+    }
+
+    pub fn stop(&mut self) {
+        self.should_stop.store(true, Ordering::Relaxed);
+    }
+
+    pub fn ensure_stopped(mut self) -> Result<A, Box<dyn Any + Send>> {
+        self.stop();
+        Ok(self.thread.join().unwrap().unwrap()) //TODO handle errors
     }
 }

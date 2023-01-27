@@ -1,42 +1,9 @@
-use std::any::Any;
 use std::time::{Duration, Instant};
 use std::sync::{mpsc, Arc, atomic::{AtomicBool, Ordering}};
-use std::thread::{self, JoinHandle};
-use std::error::Error;
+use std::thread;
 use std::fmt;
 use wmidi::{Note, MidiMessage};
-use crate::midi;
-use super::{Step, NoteDetails, GenericPlayer};
-
-pub struct Player {
-    thread: JoinHandle<Result<(), mpsc::SendError<MidiMessage<'static>>>>,
-    should_stop: Arc<AtomicBool>
-}
-
-impl Player {
-    pub fn start(arpeggio: Arpeggio, midi_out: &midi::OutputDevice) -> Result<Self, Box<dyn Error>> {
-        let sender_cloned = midi_out.sender.clone();
-        let should_stop = Arc::new(AtomicBool::new(false));
-        let should_stop_cloned = Arc::clone(&should_stop);
-        let thread = thread::Builder::new().name(format!("arp:{}", arpeggio)).spawn(move || arpeggio.play(sender_cloned, should_stop_cloned))?;
-        Ok(Self {
-            thread,
-            should_stop
-        })
-    }
-}
-
-impl GenericPlayer for Player {
-    fn stop(&mut self) {
-        self.should_stop.store(true, Ordering::Relaxed);
-    }
-
-    fn ensure_stopped(mut self) -> Result<(), Box<dyn Any + Send>> {
-        self.stop();
-        self.thread.join()?.unwrap(); //TODO handle error
-        Ok(())
-    }
-}
+use super::{Step, NoteDetails};
 
 pub struct Arpeggio {
     steps: Vec<(Duration, Step)>,
@@ -58,7 +25,7 @@ impl fmt::Display for Arpeggio {
     }
 }
 
-impl Arpeggio {
+impl super::Arpeggio for Arpeggio {
     fn play(&self, midi_out: mpsc::Sender<MidiMessage<'static>>, should_stop: Arc<AtomicBool>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         let mut i = 0;
         println!("Playing: {}", self);
@@ -76,7 +43,9 @@ impl Arpeggio {
         println!("Stopped: {}", self);
         Ok(())
     }
+}
 
+impl Arpeggio {
     fn bpm(&self) -> f64 {
         let beats = self.steps.len() as f64;
         let seconds = self.period.as_secs_f64();
@@ -103,10 +72,10 @@ impl Arpeggio {
             prev_i = instant;
         }
         steps[0].0 = finish - prev_i;
-        Arpeggio { steps, period }
+        Self { steps, period }
     }
 
-    pub fn transpose(&self, from: Note, to: Note) -> Arpeggio {
+    pub fn transpose(&self, from: Note, to: Note) -> Self {
         let from_u8: u8 = from.into();
         let to_u8: u8 = to.into();
         let half_steps = to_u8 as i8 - from_u8 as i8;

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::fs;
 use std::thread;
@@ -11,7 +12,7 @@ pub struct InputDevice {
 }
 
 pub struct ClockDevice {
-    pub ticker: mpsc::Receiver<u8>
+    path: PathBuf
 }
 
 pub struct OutputDevice {
@@ -58,27 +59,24 @@ impl InputDevice {
 impl ClockDevice {
     const MIDI_TICK: u8 = 0xF8;
     
-    pub fn open(midi_clock: &str) -> Result<Self, Box<dyn Error>> {
-        let (tx, rx) = mpsc::channel();
-        let mut input = fs::File::options().read(true).open(midi_clock).map_err(|e| format!("Cannot open MIDI CLOCK '{}': {}", midi_clock, e))?;
-        thread::Builder::new().name(format!("midi-clock")).spawn(move || Self::read_clocks_into_queue(&mut input, tx))?;
-        Ok(Self {
-            ticker: rx
-        })
+    pub fn init(midi_clock: &str) -> Result<Self, Box<dyn Error>> {
+        let clock = Self {
+            path: PathBuf::from(midi_clock)
+        };
+        clock.wait_for_tick()?; // confirm that the file opens AND that it the device is sending CLOCK TICKS
+        Ok(clock)
     }
 
-    fn read_clocks_into_queue(f: &mut fs::File, tx: mpsc::Sender<u8>) {
+    pub fn wait_for_tick(&self) -> Result<(), Box<dyn Error>> {
+        let mut f = fs::File::options().read(true).open(&self.path).map_err(|e| format!("Cannot open MIDI CLOCK '{}': {}", self.path.display(), e))?;
         let mut buf: [u8; 1] = [0; 1];
         while f.read_exact(&mut buf).is_ok() {
             if buf[0] == Self::MIDI_TICK {
-                // tick detected, send to queue
-                if tx.send(Self::MIDI_TICK).is_err() {
-                    panic!("Error sending to queue.");
-                }
+                // tick detected
+                return Ok(());
             }
-            
         }
-        println!("NOTE: Clock device is not connected.");
+        Err(format!("Clock device disconnected: {}", self.path.display()).into())
     }
 }
 

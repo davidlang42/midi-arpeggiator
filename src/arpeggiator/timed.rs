@@ -3,8 +3,8 @@ use std::mem;
 use std::time::Instant;
 use wmidi::{Note, MidiMessage, ControlFunction};
 use crate::midi;
-use crate::arpeggio::{timed::{Arpeggio, Player}, NoteDetails};
-use crate::arpeggio::GenericPlayer;
+use crate::arpeggio::{NoteDetails, Player};
+use crate::arpeggio::timed::Arpeggio;
 use super::*;
 
 pub struct RepeatRecorder {
@@ -12,7 +12,7 @@ pub struct RepeatRecorder {
     midi_out: midi::OutputDevice,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     last_note_off: Option<(Instant, NoteDetails)>,
-    arpeggios: HashMap<Note, Player>,
+    arpeggios: HashMap<Note, Player<Arpeggio>>,
 }
 
 impl RepeatRecorder {
@@ -78,7 +78,7 @@ pub struct PedalRecorder {
     notes: Vec<(Instant, NoteDetails)>,
     thru_notes: HashMap<Note, NoteDetails>,
     pedal: bool,
-    arpeggios: HashMap<Note, Player>,
+    arpeggios: HashMap<Note, Player<Arpeggio>>,
     recorded: Option<Arpeggio>
 }
 
