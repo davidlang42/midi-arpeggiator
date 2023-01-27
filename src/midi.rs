@@ -80,7 +80,6 @@ impl InputDevice {
 
 impl ClockDevice {
     const MIDI_TICK: u8 = 0xF8;
-    const MIDI_TICKS_PER_BEAT: u64 = 24;
     
     pub fn init(midi_clock: &str) -> Result<Self, Box<dyn Error>> {
         let mut clock = Self {
@@ -137,7 +136,7 @@ impl ClockDevice {
                 }
             }
         }
-        Err(format!("Clock device disconnected: {}", self.path.display()).into())
+        println!("NOTE: Clock device is not connected.");
     }
 }
 

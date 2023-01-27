@@ -11,9 +11,11 @@ const REPEAT:&str = "repeat";
 const PEDAL: &str = "pedal";
 const CLOCK_DOWN: &str = "clock-down";
 const CLOCK_UP: &str = "clock-up";
-const MODES: [&str; 4] = [
+const CLOCK: &str = "clock";
+const MODES: [&str; 5] = [
     REPEAT,
     PEDAL,
+    CLOCK,
     CLOCK_DOWN,
     CLOCK_UP
 ];
@@ -31,6 +33,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         )),
         PEDAL => Box::new(timed::PedalRecorder::new(
             InputDevice::open(&midi_in, false)?,
+            OutputDevice::open(&midi_out)?
+        )),
+        CLOCK => Box::new(synced::MutatingHold::new(
+            InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
             OutputDevice::open(&midi_out)?
         )),
         CLOCK_DOWN => Box::new(synced::PressHold::new(

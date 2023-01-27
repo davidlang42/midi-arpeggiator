@@ -33,8 +33,6 @@ impl fmt::Display for Step {
 }
 
 impl Step {
-    pub const EMPTY: Step = Step { notes: Vec::new() };
-
     pub fn send_on(&self, tx: &mpsc::Sender<MidiMessage<'static>>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         for note in &self.notes {
             let message = MidiMessage::NoteOn(note.c, note.n, note.v);

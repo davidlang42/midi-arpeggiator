@@ -34,7 +34,7 @@ impl Arpeggio {
         self.steps[0].highest_note()
     }
 
-    pub fn from(notes: Vec<NoteDetails>, finish_steps: bool) -> Self {
+    pub fn from(notes: &Vec<NoteDetails>, finish_steps: bool) -> Self {
         if notes.len() == 0 {
             panic!("Cannot construct an Arpeggio without any notes");
         }
@@ -43,11 +43,11 @@ impl Arpeggio {
         } else {
             midi::TICKS_PER_BEAT / notes.len()
         };
-        let steps = notes.into_iter().map(|n| Step::note(n)).collect();
+        let steps = notes.iter().map(|n| Step::note(*n)).collect();
         Self { steps, ticks_per_step, finish_steps }
     }
 
-    pub fn _transpose(self, from: Note, to: Note) -> Self {
+    pub fn _transpose(&self, from: Note, to: Note) -> Self {
         let from_u8: u8 = from.into();
         let to_u8: u8 = to.into();
         let half_steps = to_u8 as i8 - from_u8 as i8;
@@ -81,6 +81,9 @@ impl Player {
     }
 
     pub fn play_tick(&mut self) -> Result<bool, mpsc::SendError<MidiMessage<'static>>>  {
+        if self.arpeggio.steps.len() == 0 {
+            return Ok(false);
+        }
         if self.should_stop && !self.arpeggio.finish_steps {
             if let Some(last_step) = self.last_step {
                 self.arpeggio.steps[last_step].send_off(&self.midi_out)?;
@@ -102,10 +105,26 @@ impl Player {
                 self.step += 1;
             }
             self.wait_ticks = self.arpeggio.ticks_per_step;
-        } else {
-            self.wait_ticks -= 1;
         }
+        self.wait_ticks -= 1;
         Ok(true)
+    }
+
+    pub fn change_arpeggio(&mut self, arpeggio: Arpeggio) -> Result<(), mpsc::SendError<MidiMessage<'static>>>  {
+        if let Some(last_step) = self.last_step {
+            self.arpeggio.steps[last_step].send_off(&self.midi_out)?;
+        }
+        self.last_step = None;
+        let steps_since_start = if self.step == 0 {
+            self.arpeggio.steps.len()
+        } else {
+            self.step
+        };
+        let ticks_since_start = steps_since_start * self.arpeggio.ticks_per_step - self.wait_ticks;
+        self.arpeggio = arpeggio;
+        self.step = ((ticks_since_start - 1) / self.arpeggio.ticks_per_step + 1) % self.arpeggio.steps.len();
+        self.wait_ticks = self.arpeggio.ticks_per_step - ((ticks_since_start - 1).rem_euclid(self.arpeggio.ticks_per_step) + 1);
+        Ok(())
     }
 
     pub fn stop(&mut self) {
