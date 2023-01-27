@@ -36,7 +36,7 @@ impl Player {
 }
 
 pub struct Arpeggio {
-    steps: Vec<Step>,
+    steps: Vec<(Duration, Step)>,
     period: Duration
 }
 
@@ -45,9 +45,9 @@ impl fmt::Display for Arpeggio {
         match self.steps.len() {
             0 => write!(f, "-")?,
             len => {
-                write!(f, "{}", self.steps[0])?;
+                write!(f, "{}", self.steps[0].1)?;
                 for i in 1..len {
-                    write!(f, ",{}", self.steps[i])?;
+                    write!(f, ",{}", self.steps[i].1)?;
                 }
             }
         }
@@ -60,15 +60,15 @@ impl Arpeggio {
         let mut i = 0;
         println!("Playing: {}", self);
         while !should_stop.load(Ordering::Relaxed) {
-            self.steps[i].send_on(&midi_out)?;
-            let last_step = &self.steps[i];
+            let step = &self.steps[i].1;
+            step.send_on(&midi_out)?;
             if i == self.steps.len() - 1 {
                 i = 0;
             } else {
                 i += 1;
             }
-            thread::sleep(self.steps[i].wait);
-            last_step.send_off(&midi_out)?;
+            thread::sleep(self.steps[i].0);
+            step.send_off(&midi_out)?;
         }
         println!("Stopped: {}", self);
         Ok(())
@@ -84,7 +84,7 @@ impl Arpeggio {
         if self.steps.len() == 0 {
             panic!("Arpeggios must have at least 1 step");
         }
-        self.steps[0].highest_note()
+        self.steps[0].1.highest_note()
     }
 
     pub fn from(notes: Vec<(Instant, NoteDetails)>, finish: Instant) -> Self {
@@ -96,13 +96,10 @@ impl Arpeggio {
         let mut steps = Vec::new();
         let mut prev_i = start;
         for (instant, note) in notes {
-            steps.push(Step {
-                wait: instant - prev_i,
-                notes: vec![note]
-            });
+            steps.push((instant - prev_i, Step::note(note)));
             prev_i = instant;
         }
-        steps[0].wait = finish - prev_i;
+        steps[0].0 = finish - prev_i;
         Arpeggio { steps, period }
     }
 
@@ -112,13 +109,12 @@ impl Arpeggio {
         let half_steps = to_u8 as i8 - from_u8 as i8;
         Self {
             period: self.period,
-            steps: self.steps.iter().map(|s| s.transpose(half_steps)).collect()
+            steps: self.steps.iter().map(|(d, s)| (*d, s.transpose(half_steps))).collect()
         }
     }
 }
 
 pub struct Step {
-    wait: Duration,
     notes: Vec<NoteDetails>
 }
 
@@ -171,7 +167,18 @@ impl Step {
             }
         }
         Self {
-            wait: self.wait,
+            notes
+        }
+    }
+
+    fn note(note: NoteDetails) -> Self {
+        Self {
+            notes: vec![note]
+        }
+    }
+
+    fn interval(notes: Vec<NoteDetails>) -> Self {
+        Self {
             notes
         }
     }
