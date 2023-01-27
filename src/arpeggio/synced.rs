@@ -35,14 +35,13 @@ impl Arpeggio {
     }
 
     pub fn from(notes: Vec<NoteDetails>, finish_steps: bool) -> Self {
-        const TICKS_PER_QUARTER_NOTE: usize = 24;
         if notes.len() == 0 {
             panic!("Cannot construct an Arpeggio without any notes");
         }
-        let ticks_per_step = if notes.len() >= 24 {
+        let ticks_per_step = if notes.len() >= midi::TICKS_PER_BEAT {
             1
         } else {
-            TICKS_PER_QUARTER_NOTE / notes.len()
+            midi::TICKS_PER_BEAT / notes.len()
         };
         let steps = notes.into_iter().map(|n| Step::note(n)).collect();
         Self { steps, ticks_per_step, finish_steps }

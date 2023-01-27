@@ -60,6 +60,7 @@ impl<'a> Arpeggiator for PressHold {
                         let note_details: Vec<NoteDetails> = self.held_notes.drain().map(|(_, v)| v).collect();
                         let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
                         let arp = Arpeggio::from(self.pattern.of(note_details), self.finish_full_arpeggio);
+                        println!("Arp: {}", arp);
                         self.arpeggios.push((note_set, Player::init(arp, &self.midi_out)));
                     }
                     let mut i = 0;

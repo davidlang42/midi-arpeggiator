@@ -21,6 +21,8 @@ pub struct OutputDevice {
     pub sender: mpsc::Sender<MidiMessage<'static>>
 }
 
+pub const TICKS_PER_BEAT: usize = 24;
+
 impl InputDevice {
     pub fn open(midi_in: &str, include_clock_ticks: bool) -> Result<Self, Box<dyn Error>> {
         let (tx, rx) = mpsc::channel();
@@ -35,8 +37,8 @@ impl InputDevice {
         let (tx, rx) = mpsc::channel();
         let include_clock_ticks = midi_in == clock_in;
         let mut input = fs::File::options().read(true).open(midi_in).map_err(|e| format!("Cannot open MIDI IN '{}': {}", midi_in, e))?;
+        let clock = ClockDevice::init(clock_in)?;
         if !include_clock_ticks {
-            let clock = ClockDevice::init(clock_in)?;
             clock.connect(tx.clone())?;
         }
         thread::Builder::new().name(format!("midi-in")).spawn(move || Self::read_into_queue(&mut input, tx, include_clock_ticks))?;
@@ -78,6 +80,7 @@ impl InputDevice {
 
 impl ClockDevice {
     const MIDI_TICK: u8 = 0xF8;
+    const MIDI_TICKS_PER_BEAT: u64 = 24;
     
     pub fn init(midi_clock: &str) -> Result<Self, Box<dyn Error>> {
         let mut clock = Self {
@@ -96,7 +99,7 @@ impl ClockDevice {
             thread::sleep(Duration::from_millis(SLEEP_MS));
         }
         if !test.is_finished() {
-            Err(format!("MIDI CLOCK did not send a clock signal within {}ms (less than {:0.0} bpm): {}", SLEEP_COUNT * SLEEP_MS, 60000.0 / ((SLEEP_COUNT * SLEEP_MS) as f64), midi_clock).into())
+            Err(format!("MIDI CLOCK did not send a clock signal within {}ms (less than {:0.0} bpm): {}", SLEEP_COUNT * SLEEP_MS, 60000.0 / ((TICKS_PER_BEAT as u64 * SLEEP_COUNT * SLEEP_MS) as f64), midi_clock).into())
         } else {
             match test.join() {
                 Ok(Ok(clock)) => Ok(clock),
