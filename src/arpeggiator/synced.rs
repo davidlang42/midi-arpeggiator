@@ -1,5 +1,6 @@
 use wmidi::{Note, MidiMessage};
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 use crate::midi;
 use crate::arpeggio::NoteDetails;
 use crate::arpeggio::synced::{Arpeggio, Player};
@@ -20,13 +21,15 @@ use super::{Arpeggiator, Pattern};
 pub struct PressHold {
     midi_in: midi::InputDevice,
     midi_out: midi::OutputDevice,
-    held_notes: HashMap<Note, NoteDetails>,
+    held_notes: HashMap<Note, (Instant, NoteDetails)>,
     arpeggios: Vec<(HashSet<Note>, Player)>,
     pattern: Pattern,
     finish_full_arpeggio: bool
 }
 
 impl PressHold {
+    const TRIGGER_TIME_MS: u128 = 50;
+
     pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice, pattern: Pattern, finish_full_arpeggio: bool) -> Self {
         Self {
             midi_in,
@@ -45,7 +48,7 @@ impl<'a> Arpeggiator for PressHold {
             match received {
                 //TODO handle pedal up/down
                 MidiMessage::NoteOn(c, n, v) => {
-                    self.held_notes.insert(n, NoteDetails { c, n, v });
+                    self.held_notes.insert(n, (Instant::now(), NoteDetails { c, n, v }));
                 },
                 MidiMessage::NoteOff(_, n, _) => {
                     self.held_notes.remove(&n);
@@ -56,8 +59,8 @@ impl<'a> Arpeggiator for PressHold {
                     }
                 },
                 MidiMessage::TimingClock => {
-                    if self.held_notes.len() != 0 {
-                        let note_details: Vec<NoteDetails> = self.held_notes.drain().map(|(_, v)| v).collect();
+                    if self.held_notes.len() != 0 && self.held_notes.values().map(|(i, _)| i).min().unwrap().elapsed().as_millis() > Self::TRIGGER_TIME_MS {
+                        let note_details: Vec<NoteDetails> = self.held_notes.drain().map(|(_, (_, d))| d).collect();
                         let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
                         let arp = Arpeggio::from(self.pattern.of(note_details), self.finish_full_arpeggio);
                         println!("Arp: {}", arp);
