@@ -111,6 +111,10 @@ impl Player {
 
     pub fn ensure_stopped(mut self) -> Result<(), Box<dyn Error>> {
         self.stop();
-        Ok(self.thread.join().unwrap().unwrap()) //TODO handle errors
+        match self.thread.join() {
+            Ok(Err(inner)) => Err(Box::new(inner)),
+            Err(_) => Err(format!("Thread paniced").into()),
+            Ok(Ok(ok)) => Ok(ok)
+        }
     }
 }
