@@ -63,7 +63,8 @@ pub struct Player {
     midi_out: mpsc::Sender<MidiMessage<'static>>,
     arpeggio: Arpeggio,
     step: usize,
-    last_step: Option<usize>,
+    last_index: Option<usize>,
+    last_step: Option<Step>,
     wait_ticks: usize,
     pub should_stop: bool
 }
@@ -75,6 +76,7 @@ impl Player {
             step: 0,
             wait_ticks: 0,
             should_stop: false,
+            last_index: None,
             last_step: None,
             midi_out: midi_out.sender.clone()
         }
@@ -85,20 +87,26 @@ impl Player {
             return Ok(false);
         }
         if self.should_stop && !self.arpeggio.finish_steps {
-            if let Some(last_step) = self.last_step {
-                self.arpeggio.steps[last_step].send_off(&self.midi_out)?;
+            if let Some(last_index) = self.last_index {
+                self.arpeggio.steps[last_index].send_off(&self.midi_out)?;
+            } else if let Some(last_step) = &self.last_step {
+                last_step.send_off(&self.midi_out)?;
+                self.last_step = None;
             }
             return Ok(false);
         }
         if self.wait_ticks == 0 {
-            if let Some(last_step) = self.last_step {
-                self.arpeggio.steps[last_step].send_off(&self.midi_out)?;
+            if let Some(last_index) = self.last_index {
+                self.arpeggio.steps[last_index].send_off(&self.midi_out)?;
+            } else if let Some(last_step) = &self.last_step {
+                last_step.send_off(&self.midi_out)?;
+                self.last_step = None;
             }
             if self.should_stop && self.step == 0 {
                 return Ok(false);
             }
             self.arpeggio.steps[self.step].send_on(&self.midi_out)?;
-            self.last_step = Some(self.step);
+            self.last_index = Some(self.step);
             if self.step == self.arpeggio.steps.len() - 1 {
                 self.step = 0;
             } else {
@@ -111,10 +119,10 @@ impl Player {
     }
 
     pub fn change_arpeggio(&mut self, arpeggio: Arpeggio) -> Result<(), mpsc::SendError<MidiMessage<'static>>>  {
-        if let Some(last_step) = self.last_step {
-            self.arpeggio.steps[last_step].send_off(&self.midi_out)?;
+        if let Some(last_index) = self.last_index {
+            self.last_step = Some(self.arpeggio.steps.remove(last_index));
+            self.last_index = None;
         }
-        self.last_step = None;
         let steps_since_start = if self.step == 0 {
             self.arpeggio.steps.len()
         } else {
