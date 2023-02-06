@@ -1,4 +1,4 @@
-use std::sync::mpsc;
+use std::{sync::mpsc, error::Error};
 use std::fmt;
 use wmidi::{Note, MidiMessage};
 use crate::midi;
@@ -139,12 +139,14 @@ impl Player {
         self.should_stop = true;
     }
 
-    pub fn force_stop(&mut self) {
+    pub fn force_stop(&mut self) -> Result<(), Box<dyn Error>> {
         self.step = 0;
         self.wait_ticks = 0;
         self.should_stop = true;
-        if self.play_tick().unwrap() {
-            panic!("Failed to force stop arpeggio");
+        if self.play_tick()? {
+            Err(format!("Failed to force stop arpeggio").into())
+        } else {
+            Ok(())
         }
     }
 }

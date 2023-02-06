@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::error::Error;
 use std::time::{Duration, Instant};
 use std::sync::{mpsc, Arc, atomic::{AtomicBool, Ordering}};
@@ -110,7 +109,7 @@ impl Player {
         self.should_stop.store(true, Ordering::Relaxed);
     }
 
-    pub fn ensure_stopped(mut self) -> Result<(), Box<dyn Any + Send>> {
+    pub fn ensure_stopped(mut self) -> Result<(), Box<dyn Error>> {
         self.stop();
         Ok(self.thread.join().unwrap().unwrap()) //TODO handle errors
     }

@@ -52,8 +52,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             Pattern::Up,
             true
         )),
-        _ => panic!("Invalid arpeggiator mode: {}", mode)
+        _ => return Err(format!("Invalid arpeggiator mode: {}", mode).into())
     };
-    arp.listen();//TODO make this stop on ESC pressed (or any key?)
+    arp.listen()?;//TODO make this stop on ESC pressed (or any key?)
     Ok(())
 }

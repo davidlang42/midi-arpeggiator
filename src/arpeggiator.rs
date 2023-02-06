@@ -1,3 +1,4 @@
+use std::error::Error;
 use crate::arpeggio::NoteDetails;
 
 pub mod timed;
@@ -20,6 +21,6 @@ impl Pattern {
 }
 
 pub trait Arpeggiator {
-    fn listen(&mut self);
-    fn stop_arpeggios(&mut self);
+    fn listen(&mut self) -> Result<(), Box<dyn Error>>;
+    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>>;
 }

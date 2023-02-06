@@ -1,5 +1,6 @@
 use wmidi::{Note, MidiMessage};
 use std::collections::{HashMap, HashSet};
+use std::error::Error;
 use std::time::Instant;
 use crate::midi;
 use crate::arpeggio::NoteDetails;
@@ -31,7 +32,7 @@ impl PressHold {
 }
 
 impl<'a> Arpeggiator for PressHold {
-    fn listen(&mut self) {
+    fn listen(&mut self) -> Result<(), Box<dyn Error>> {
         for received in &self.midi_in.receiver {
             match received {
                 //TODO handle pedal up/down
@@ -56,7 +57,7 @@ impl<'a> Arpeggiator for PressHold {
                     }
                     let mut i = 0;
                     while i < self.arpeggios.len() {
-                        if !self.arpeggios[i].1.play_tick().unwrap() { //TODO handle error
+                        if !self.arpeggios[i].1.play_tick()? {
                             self.arpeggios.remove(i);
                         } else {
                             i += 1;
@@ -65,15 +66,16 @@ impl<'a> Arpeggiator for PressHold {
                 },
                 MidiMessage::Reset => {
                     self.held_notes.clear();
-                    drain_and_force_stop(&mut self.arpeggios);
+                    drain_and_force_stop(&mut self.arpeggios)?;
                 },
                 _ => {}
             }
         }
+        Ok(())
     }
 
-    fn stop_arpeggios(&mut self) {
-        drain_and_force_stop(&mut self.arpeggios);
+    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
+        drain_and_force_stop(&mut self.arpeggios)
     }
 }
 
@@ -100,7 +102,7 @@ impl MutatingHold {
 }
 
 impl<'a> Arpeggiator for MutatingHold {
-    fn listen(&mut self) {
+    fn listen(&mut self) -> Result<(), Box<dyn Error>> {
         for received in &self.midi_in.receiver {
             match received {
                 //TODO handle pedal up/down
@@ -130,14 +132,14 @@ impl<'a> Arpeggiator for MutatingHold {
                             let arp = Arpeggio::from(&self.held_notes, self.finish_full_arpeggio);
                             println!("Arp: {}", arp);
                             if let Some(existing) = &mut self.arpeggio {
-                                existing.change_arpeggio(arp).unwrap(); //TODO handle error
+                                existing.change_arpeggio(arp)?;
                             } else {
                                 self.arpeggio = Some(Player::init(arp, &self.midi_out));
                             }
                         }
                     }
                     if let Some(arp) = &mut self.arpeggio {
-                        if !arp.play_tick().unwrap() { //TODO handle error
+                        if !arp.play_tick()? {
                             self.arpeggio = None;
                         }
                     }
@@ -145,28 +147,30 @@ impl<'a> Arpeggiator for MutatingHold {
                 MidiMessage::Reset => {
                     self.held_notes.clear();
                     if let Some(arp) = &mut self.arpeggio {
-                        arp.force_stop();
+                        arp.force_stop()?;
                         self.arpeggio = None;
                     }
                 },
                 _ => {}
             }
         }
+        Ok(())
     }
 
-    fn stop_arpeggios(&mut self) {
+    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
         if let Some(arp) = &mut self.arpeggio {
-            arp.force_stop();
+            arp.force_stop()?;
             self.arpeggio = None;
         }
+        Ok(())
     }
 }
 
-fn drain_and_force_stop<N>(arpeggios: &mut Vec<(N, Player)>) {
+fn drain_and_force_stop<N>(arpeggios: &mut Vec<(N, Player)>) -> Result<(), Box<dyn Error>> {
     if arpeggios.len() != 0 {
         let mut i = arpeggios.len() - 1;
         loop {
-            arpeggios[i].1.force_stop();
+            arpeggios[i].1.force_stop()?;
             arpeggios.remove(i);
             if i == 0 {
                 break;
@@ -175,4 +179,5 @@ fn drain_and_force_stop<N>(arpeggios: &mut Vec<(N, Player)>) {
             }
         }
     }
+    Ok(())
 }

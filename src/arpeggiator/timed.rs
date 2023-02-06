@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::error::Error;
 use std::mem;
 use std::time::Instant;
 use wmidi::{Note, MidiMessage, ControlFunction};
@@ -28,7 +29,7 @@ impl RepeatRecorder {
 }
 
 impl Arpeggiator for RepeatRecorder {
-    fn listen(&mut self) {
+    fn listen(&mut self) -> Result<(), Box<dyn Error>> {
         for received in &self.midi_in.receiver {
             match received {
                 MidiMessage::NoteOn(c, n, v) => {
@@ -41,7 +42,7 @@ impl Arpeggiator for RepeatRecorder {
                             notes.push((*first_i, *first));
                             notes.sort_by(|(a, _), (b, _)| a.cmp(&b));
                             let arp = Arpeggio::from(notes, finish);
-                            self.arpeggios.insert(n, Player::start(arp, &self.midi_out).unwrap()); //TODO handle error
+                            self.arpeggios.insert(n, Player::start(arp, &self.midi_out)?);
                         },
                         _ => {
                             self.held_notes.insert(n, (Instant::now(), NoteDetails { c, n, v }));
@@ -60,15 +61,16 @@ impl Arpeggiator for RepeatRecorder {
                 MidiMessage::Reset => {
                     self.held_notes.clear();
                     self.last_note_off = None;
-                    drain_and_wait_for_stop(&mut self.arpeggios);
+                    drain_and_wait_for_stop(&mut self.arpeggios)?;
                 },
                 _ => {}
             }
         }
+        Ok(())
     }
 
-    fn stop_arpeggios(&mut self) {
-        drain_and_wait_for_stop(&mut self.arpeggios);
+    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
+        drain_and_wait_for_stop(&mut self.arpeggios)
     }
 }
 
@@ -97,7 +99,7 @@ impl PedalRecorder {
 }
 
 impl Arpeggiator for PedalRecorder {
-    fn listen(&mut self) {
+    fn listen(&mut self) -> Result<(), Box<dyn Error>> {
         for received in &self.midi_in.receiver {
             match received {
                 MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
@@ -109,7 +111,7 @@ impl Arpeggiator for PedalRecorder {
                         self.pedal = false;
                         for (_, thru_note) in self.thru_notes.drain() {
                             if self.midi_out.sender.send(MidiMessage::NoteOff(thru_note.c, thru_note.n, thru_note.v)).is_err() {
-                                panic!("Unable to send to output queue");
+                                return Err(format!("Unable to send to output queue").into());
                             }
                         }
                         if self.notes.len() > 0 {
@@ -121,14 +123,14 @@ impl Arpeggiator for PedalRecorder {
                             let arp = self.recorded.as_ref().unwrap();
                             let original = arp.first_note();
                             let new_arp = arp.transpose(original, original);
-                            self.arpeggios.insert(original, Player::start(new_arp, &self.midi_out).unwrap()); //TODO handle error
+                            self.arpeggios.insert(original, Player::start(new_arp, &self.midi_out)?);
                         }
                     }
                 },
                 MidiMessage::NoteOn(c, n, v) => {
                     if self.pedal {
                         if self.midi_out.sender.send(received).is_err() {
-                            panic!("Unable to forward to output queue");
+                            return Err(format!("Unable to forward to output queue").into());
                         }
                         let d = NoteDetails { c, n, v };
                         self.thru_notes.insert(n, d);
@@ -138,13 +140,13 @@ impl Arpeggiator for PedalRecorder {
                     } else if let Some(arp) = &self.recorded {
                         let original = arp.first_note();
                         let new_arp = arp.transpose(original, n);
-                        self.arpeggios.insert(n, Player::start(new_arp, &self.midi_out).unwrap()); //TODO handle error
+                        self.arpeggios.insert(n, Player::start(new_arp, &self.midi_out)?);
                     }
                 },
                 MidiMessage::NoteOff(_, n, _) => {
                     if self.pedal {
                         if self.midi_out.sender.send(received).is_err() {
-                            panic!("Unable to forward to output queue");
+                            return Err(format!("Unable to forward to output queue").into());
                         }
                         self.thru_notes.remove(&n);
                     } else if let Some(mut player) = self.arpeggios.remove(&n) {
@@ -154,15 +156,16 @@ impl Arpeggiator for PedalRecorder {
                 MidiMessage::Reset => {
                     self.notes.clear();
                     self.pedal = false;
-                    drain_and_wait_for_stop(&mut self.arpeggios);
+                    drain_and_wait_for_stop(&mut self.arpeggios)?;
                 },
                 _ => {}
             }
         }
+        Ok(())
     }
 
-    fn stop_arpeggios(&mut self) {
-        drain_and_wait_for_stop(&mut self.arpeggios);
+    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
+        drain_and_wait_for_stop(&mut self.arpeggios)
     }
 }
 
@@ -175,8 +178,9 @@ fn drain_and_stop<N>(arpeggios: &mut HashMap<N, Player>) -> Vec<Player> {
     players
 }
 
-fn drain_and_wait_for_stop<N>(arpeggios: &mut HashMap<N, Player>) {
+fn drain_and_wait_for_stop<N>(arpeggios: &mut HashMap<N, Player>) -> Result<(), Box<dyn Error>> {
     for player in drain_and_stop(arpeggios) {
-        player.ensure_stopped().unwrap(); //TODO handle error
+        player.ensure_stopped()?;
     }
+    Ok(())
 }
