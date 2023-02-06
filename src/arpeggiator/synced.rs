@@ -83,16 +83,18 @@ pub struct MutatingHold {
     held_notes: Vec<NoteDetails>,
     changed: bool,
     arpeggio: Option<Player>,
+    finish_full_arpeggio: bool
 }
 
 impl MutatingHold {
-    pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice) -> Self {
+    pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice, finish_full_arpeggio: bool) -> Self {
         Self {
             midi_in,
             midi_out,
             held_notes: Vec::new(),
             changed: false,
-            arpeggio: None
+            arpeggio: None,
+            finish_full_arpeggio
         }
     }
 }
@@ -118,15 +120,14 @@ impl<'a> Arpeggiator for MutatingHold {
                     }
                 },
                 MidiMessage::TimingClock => {
-                    if self.changed {
+                    if self.changed && (self.arpeggio.is_none() || !self.arpeggio.as_ref().unwrap().should_stop) { // don't process new notes the arp is already stopping
                         self.changed = false;
                         if self.held_notes.len() == 0 {
                             if let Some(existing) = &mut self.arpeggio {
-                                existing.force_stop();
+                                existing.stop();
                             }
-                            self.arpeggio = None;
                         } else {
-                            let arp = Arpeggio::from(&self.held_notes, false);
+                            let arp = Arpeggio::from(&self.held_notes, self.finish_full_arpeggio);
                             println!("Arp: {}", arp);
                             if let Some(existing) = &mut self.arpeggio {
                                 existing.change_arpeggio(arp).unwrap(); //TODO handle error

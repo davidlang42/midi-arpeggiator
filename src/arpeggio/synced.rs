@@ -65,7 +65,7 @@ pub struct Player {
     step: usize,
     last_step: Option<usize>,
     wait_ticks: usize,
-    should_stop: bool
+    pub should_stop: bool
 }
 
 impl Player {

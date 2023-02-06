@@ -37,7 +37,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         )),
         CLOCK => Box::new(synced::MutatingHold::new(
             InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
-            OutputDevice::open(&midi_out)?
+            OutputDevice::open(&midi_out)?,
+            true
         )),
         CLOCK_DOWN => Box::new(synced::PressHold::new(
             InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
