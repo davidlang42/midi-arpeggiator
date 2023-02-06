@@ -32,6 +32,7 @@ impl Arpeggiator for RepeatRecorder {
     fn listen(&mut self) -> Result<(), Box<dyn Error>> {
         for received in &self.midi_in.receiver {
             match received {
+                //TODO handle pedal up/down
                 MidiMessage::NoteOn(c, n, v) => {
                     match &self.last_note_off {
                         Some((first_i, first)) if first.n == n => {
