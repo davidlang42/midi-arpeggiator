@@ -151,10 +151,14 @@ impl OutputDevice {
     }
 
     fn write_from_queue(f: &mut fs::File, rx: mpsc::Receiver<MidiMessage>) {
-        for mut received in rx {
-            let mut buf = Vec::new();
-            if received.read_to_end(&mut buf).is_err() {
-                panic!("Error writing midi message.")
+        let mut buf = Vec::new();
+        for received in rx {
+            let expected = received.bytes_size();
+            buf.resize(expected, 0);
+            match received.copy_to_slice(&mut buf) {
+                Ok(found) if found != expected => panic!("Error writing midi message: Not enough bytes (expected {} found {}).", expected, found),
+                Err(_) => panic!("Error writing midi message: Too many bytes (expected {}).", expected),
+                _ => {}
             }
             if f.write_all(&buf).is_err() {
                 panic!("Error writing to device.")
