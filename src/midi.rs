@@ -8,6 +8,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 use wmidi::FromBytesError;
 use wmidi::MidiMessage;
+use wmidi::U7;
 
 pub struct InputDevice {
     pub receiver: mpsc::Receiver<MidiMessage<'static>>
@@ -27,7 +28,7 @@ impl InputDevice {
     pub fn open(midi_in: &str, include_clock_ticks: bool) -> Result<Self, Box<dyn Error>> {
         let (tx, rx) = mpsc::channel();
         let mut input = fs::File::options().read(true).open(midi_in).map_err(|e| format!("Cannot open MIDI IN '{}': {}", midi_in, e))?;
-        thread::Builder::new().name(format!("midi-in")).spawn(move || Self::read_into_queue(&mut input, tx, include_clock_ticks))?;
+        thread::Builder::new().name(format!("midi-in")).spawn(move || Self::read_into_queue(&mut input, tx, include_clock_ticks, true))?;
         Ok(Self {
             receiver: rx
         })
@@ -41,13 +42,13 @@ impl InputDevice {
         if !include_clock_ticks {
             clock.connect(tx.clone())?;
         }
-        thread::Builder::new().name(format!("midi-in")).spawn(move || Self::read_into_queue(&mut input, tx, include_clock_ticks))?;
+        thread::Builder::new().name(format!("midi-in")).spawn(move || Self::read_into_queue(&mut input, tx, include_clock_ticks, true))?;
         Ok(Self {
             receiver: rx
         })
     }
 
-    fn read_into_queue(f: &mut fs::File, tx: mpsc::Sender<MidiMessage>, include_clock_ticks: bool) {
+    fn read_into_queue(f: &mut fs::File, tx: mpsc::Sender<MidiMessage>, include_clock_ticks: bool, rewrite_note_zero_as_off: bool) {
         let mut buf: [u8; 1] = [0; 1];
         let mut bytes = Vec::new();
         while f.read_exact(&mut buf).is_ok() {
@@ -55,6 +56,13 @@ impl InputDevice {
             match MidiMessage::try_from(bytes.as_slice()) {
                 Ok(MidiMessage::TimingClock) if !include_clock_ticks => {
                     // skip clock tick if not required
+                    bytes.clear();
+                },
+                Ok(MidiMessage::NoteOn(c, n, U7::MIN)) if rewrite_note_zero_as_off => {
+                    // some keyboards send NoteOn(velocity: 0) instead of NoteOff (eg. Kaysound MK-4902)
+                    if tx.send(MidiMessage::NoteOff(c, n, U7::MIN)).is_err() {
+                        panic!("Error rewriting NoteOn(0) as NoteOff to queue.");
+                    }
                     bytes.clear();
                 },
                 Ok(message) => {
