@@ -2,13 +2,12 @@ use std::{sync::mpsc, error::Error};
 use std::fmt;
 use wmidi::{Note, MidiMessage};
 use crate::midi;
-
-use super::{Step, NoteDetails};
+use super::Step;
 
 pub struct Arpeggio {
     steps: Vec<Step>,
     ticks_per_step: usize,
-    finish_steps: bool
+    finish_steps: bool //TODO could finish_steps be a FinishSettings?
 }
 
 impl fmt::Display for Arpeggio {
@@ -34,16 +33,15 @@ impl Arpeggio {
         self.steps[0].highest_note()
     }
 
-    pub fn from(notes: &Vec<NoteDetails>, finish_steps: bool) -> Self {
-        if notes.len() == 0 {
-            panic!("Cannot construct an Arpeggio without any notes");
+    pub fn from(steps: Vec<Step>, finish_steps: bool) -> Self {
+        if steps.len() == 0 {
+            panic!("Cannot construct an Arpeggio without any steps");
         }
-        let ticks_per_step = if notes.len() >= midi::TICKS_PER_BEAT {
+        let ticks_per_step = if steps.len() >= midi::TICKS_PER_BEAT {
             1
         } else {
-            midi::TICKS_PER_BEAT / notes.len()
+            midi::TICKS_PER_BEAT / steps.len()
         };
-        let steps = notes.iter().map(|n| Step::note(*n)).collect();
         Self { steps, ticks_per_step, finish_steps }
     }
 

@@ -1,11 +1,14 @@
 use std::env;
 use std::error::Error;
+
+use crate::settings::{StopArpeggio, FixedNotesPerStep};
 use crate::midi::{InputDevice, OutputDevice};
 use crate::arpeggiator::{Pattern, Arpeggiator, timed, synced};
 
 mod midi;
 mod arpeggio;
 mod arpeggiator;
+mod settings;
 
 const REPEAT:&str = "repeat";
 const PEDAL: &str = "pedal";
@@ -29,31 +32,31 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut arp: Box<dyn Arpeggiator> = match mode.as_str() {
         REPEAT => Box::new(timed::RepeatRecorder::new(
             InputDevice::open(&midi_in, false)?,
-            OutputDevice::open(&midi_out)?
+            OutputDevice::open(&midi_out)?,
+            &StopArpeggio::WhenFinished
         )),
         PEDAL => Box::new(timed::PedalRecorder::new(
             InputDevice::open(&midi_in, false)?,
-            OutputDevice::open(&midi_out)?
+            OutputDevice::open(&midi_out)?,
+            &StopArpeggio::Immediately
         )),
         CLOCK => Box::new(synced::MutatingHold::new(
             InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
             OutputDevice::open(&midi_out)?,
-            true
+            &StopArpeggio::WhenFinished
         )),
         CLOCK_DOWN => Box::new(synced::PressHold::new(
             InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
             OutputDevice::open(&midi_out)?,
-            Pattern::Down,
-            true
+            &FixedNotesPerStep(1, Pattern::Down, StopArpeggio::WhenFinished)
         )),
         CLOCK_UP => Box::new(synced::PressHold::new(
             InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
             OutputDevice::open(&midi_out)?,
-            Pattern::Up,
-            true
+            &FixedNotesPerStep(1, Pattern::Up, StopArpeggio::WhenFinished)
         )),
         _ => return Err(format!("Invalid arpeggiator mode: {}", mode).into())
     };
-    arp.listen()?;//TODO make this stop on ESC pressed (or any key?)
+    arp.listen()?; //TODO make this stop on ESC pressed (or any key?)
     Ok(())
 }

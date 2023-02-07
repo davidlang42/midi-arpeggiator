@@ -10,7 +10,8 @@ use super::{Step, NoteDetails};
 
 pub struct Arpeggio {
     steps: Vec<(Duration, Step)>,
-    period: Duration
+    period: Duration,
+    finish_steps: bool //TODO could finish_steps be a FinishSettings?
 }
 
 impl fmt::Display for Arpeggio {
@@ -32,7 +33,7 @@ impl Arpeggio {
     fn play(&self, midi_out: mpsc::Sender<MidiMessage<'static>>, should_stop: Arc<AtomicBool>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         let mut i = 0;
         println!("Playing: {}", self);
-        while !should_stop.load(Ordering::Relaxed) {
+        while !should_stop.load(Ordering::Relaxed) || (self.finish_steps && i != 0) {
             let step = &self.steps[i].1;
             step.send_on(&midi_out)?;
             if i == self.steps.len() - 1 {
@@ -60,7 +61,7 @@ impl Arpeggio {
         self.steps[0].1.highest_note()
     }
 
-    pub fn from(notes: Vec<(Instant, NoteDetails)>, finish: Instant) -> Self {
+    pub fn from(notes: Vec<(Instant, NoteDetails)>, finish: Instant, finish_steps: bool) -> Self {
         if notes.len() == 0 {
             panic!("Cannot construct an Arpeggio without any notes");
         }
@@ -73,7 +74,7 @@ impl Arpeggio {
             prev_i = instant;
         }
         steps[0].0 = finish - prev_i;
-        Self { steps, period }
+        Self { steps, period, finish_steps }
     }
 
     pub fn transpose(&self, from: Note, to: Note) -> Self {
@@ -82,7 +83,8 @@ impl Arpeggio {
         let half_steps = to_u8 as i8 - from_u8 as i8;
         Self {
             period: self.period,
-            steps: self.steps.iter().map(|(d, s)| (*d, s.transpose(half_steps))).collect()
+            steps: self.steps.iter().map(|(d, s)| (*d, s.transpose(half_steps))).collect(),
+            finish_steps: self.finish_steps
         }
     }
 }

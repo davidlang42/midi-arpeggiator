@@ -70,9 +70,13 @@ impl Step {
         }
     }
 
-    fn note(note: NoteDetails) -> Self {
+    pub fn note(note: NoteDetails) -> Self {
         Self {
             notes: vec![note]
         }
+    }
+
+    pub fn notes(notes: Vec<NoteDetails>) -> Self {
+        Self { notes }
     }
 }

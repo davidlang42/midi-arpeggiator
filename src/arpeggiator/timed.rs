@@ -6,29 +6,32 @@ use wmidi::{Note, MidiMessage, ControlFunction};
 use crate::midi;
 use crate::arpeggio::NoteDetails;
 use crate::arpeggio::timed::{Arpeggio, Player};
+use crate::settings::FinishSettings;
 use super::Arpeggiator;
 
-pub struct RepeatRecorder {
+pub struct RepeatRecorder<'a, S: FinishSettings> {
     midi_in: midi::InputDevice,
     midi_out: midi::OutputDevice,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     last_note_off: Option<(Instant, NoteDetails)>,
     arpeggios: HashMap<Note, Player>,
+    settings: &'a S
 }
 
-impl RepeatRecorder {
-    pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice) -> Self {
+impl<'a, S: FinishSettings> RepeatRecorder<'a, S> {
+    pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice, settings: &'a S) -> Self {
         Self {
             midi_in,
             midi_out,
             held_notes: HashMap::new(),
             last_note_off: None,
-            arpeggios: HashMap::new()
+            arpeggios: HashMap::new(),
+            settings
         }
     }
 }
 
-impl Arpeggiator for RepeatRecorder {
+impl<'a, S: FinishSettings> Arpeggiator for RepeatRecorder<'a, S> {
     fn listen(&mut self) -> Result<(), Box<dyn Error>> {
         for received in &self.midi_in.receiver {
             match received {
@@ -37,12 +40,12 @@ impl Arpeggiator for RepeatRecorder {
                     match &self.last_note_off {
                         Some((first_i, first)) if first.n == n => {
                             let finish = Instant::now();
-                            //TODO add check that there wasn't a long gap between last note off and this note on
+                            //TODO check that there wasn't a long gap between last note off and this note on
                             //TODO handle multiple notes in one step
                             let mut notes: Vec<(Instant, NoteDetails)> = self.held_notes.drain().map(|(_, v)| v).collect();
                             notes.push((*first_i, *first));
                             notes.sort_by(|(a, _), (b, _)| a.cmp(&b));
-                            let arp = Arpeggio::from(notes, finish);
+                            let arp = Arpeggio::from(notes, finish, self.settings.finish_pattern());
                             self.arpeggios.insert(n, Player::start(arp, &self.midi_out)?);
                         },
                         _ => {
@@ -75,18 +78,19 @@ impl Arpeggiator for RepeatRecorder {
     }
 }
 
-pub struct PedalRecorder {
+pub struct PedalRecorder<'a, S: FinishSettings> {
     midi_in: midi::InputDevice,
     midi_out: midi::OutputDevice,
     notes: Vec<(Instant, NoteDetails)>,
     thru_notes: HashMap<Note, NoteDetails>,
     pedal: bool,
     arpeggios: HashMap<Note, Player>,
-    recorded: Option<Arpeggio>
+    recorded: Option<Arpeggio>,
+    settings: &'a S
 }
 
-impl PedalRecorder {
-    pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice) -> Self {
+impl<'a, S: FinishSettings> PedalRecorder<'a, S> {
+    pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice, settings: &'a S) -> Self {
         Self {
             midi_in,
             midi_out,
@@ -94,12 +98,13 @@ impl PedalRecorder {
             thru_notes: HashMap::new(),
             pedal: false,
             arpeggios: HashMap::new(),
-            recorded: None
+            recorded: None,
+            settings
         }
     }
 }
 
-impl Arpeggiator for PedalRecorder {
+impl<'a, S: FinishSettings> Arpeggiator for PedalRecorder<'a, S> {
     fn listen(&mut self) -> Result<(), Box<dyn Error>> {
         for received in &self.midi_in.receiver {
             match received {
@@ -119,7 +124,7 @@ impl Arpeggiator for PedalRecorder {
                             // save recorded arpeggio
                             let finish = Instant::now();
                             let notes = mem::replace(&mut self.notes, Vec::new());
-                            self.recorded = Some(Arpeggio::from(notes, finish));
+                            self.recorded = Some(Arpeggio::from(notes, finish, self.settings.finish_pattern()));
                             // start play in original key
                             let arp = self.recorded.as_ref().unwrap();
                             let original = arp.first_note();

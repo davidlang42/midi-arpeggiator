@@ -3,35 +3,34 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::time::Instant;
 use crate::midi;
-use crate::arpeggio::NoteDetails;
+use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggio::synced::{Arpeggio, Player};
-use super::{Arpeggiator, Pattern};
+use crate::settings::{FinishSettings, PatternSettings};
+use super::Arpeggiator;
 
-pub struct PressHold {
+pub struct PressHold<'a, S: FinishSettings + PatternSettings> {
     midi_in: midi::InputDevice,
     midi_out: midi::OutputDevice,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     arpeggios: Vec<(HashSet<Note>, Player)>,
-    pattern: Pattern,
-    finish_full_arpeggio: bool
+    settings: &'a S
 }
 
-impl PressHold {
+impl<'a, S: FinishSettings + PatternSettings> PressHold<'a, S> {
     const TRIGGER_TIME_MS: u128 = 50;
 
-    pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice, pattern: Pattern, finish_full_arpeggio: bool) -> Self {
+    pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice, settings: &'a S) -> Self {
         Self {
             midi_in,
             midi_out,
             held_notes: HashMap::new(),
             arpeggios: Vec::new(),
-            pattern,
-            finish_full_arpeggio
+            settings
         }
     }
 }
 
-impl<'a> Arpeggiator for PressHold {
+impl<'a, S: FinishSettings + PatternSettings> Arpeggiator for PressHold<'a, S> {
     fn listen(&mut self) -> Result<(), Box<dyn Error>> {
         for received in &self.midi_in.receiver {
             match received {
@@ -51,7 +50,7 @@ impl<'a> Arpeggiator for PressHold {
                     if self.held_notes.len() != 0 && self.held_notes.values().map(|(i, _)| i).min().unwrap().elapsed().as_millis() > Self::TRIGGER_TIME_MS {
                         let note_details: Vec<NoteDetails> = self.held_notes.drain().map(|(_, (_, d))| d).collect();
                         let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
-                        let arp = Arpeggio::from(&self.pattern.of(note_details), self.finish_full_arpeggio);
+                        let arp = Arpeggio::from(self.settings.generate_steps(note_details), self.settings.finish_pattern());
                         println!("Arp: {}", arp);
                         self.arpeggios.push((note_set, Player::init(arp, &self.midi_out)));
                     }
@@ -79,29 +78,29 @@ impl<'a> Arpeggiator for PressHold {
     }
 }
 
-pub struct MutatingHold {
+pub struct MutatingHold<'a, S: FinishSettings> {
     midi_in: midi::InputDevice,
     midi_out: midi::OutputDevice,
     held_notes: Vec<NoteDetails>,
     changed: bool,
     arpeggio: Option<Player>,
-    finish_full_arpeggio: bool
+    settings: &'a S
 }
 
-impl MutatingHold {
-    pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice, finish_full_arpeggio: bool) -> Self {
+impl<'a, S: FinishSettings> MutatingHold<'a, S> {
+    pub fn new(midi_in: midi::InputDevice, midi_out: midi::OutputDevice, settings: &'a S) -> Self {
         Self {
             midi_in,
             midi_out,
             held_notes: Vec::new(),
             changed: false,
             arpeggio: None,
-            finish_full_arpeggio
+            settings
         }
     }
 }
 
-impl<'a> Arpeggiator for MutatingHold {
+impl<'a, S: FinishSettings> Arpeggiator for MutatingHold<'a, S> {
     fn listen(&mut self) -> Result<(), Box<dyn Error>> {
         for received in &self.midi_in.receiver {
             match received {
@@ -131,7 +130,7 @@ impl<'a> Arpeggiator for MutatingHold {
                                 existing.stop();
                             }
                         } else {
-                            let arp = Arpeggio::from(&self.held_notes, self.finish_full_arpeggio);
+                            let arp = Arpeggio::from(self.held_notes.iter().map(|n| Step::note(*n)).collect(), self.settings.finish_pattern());
                             println!("Arp: {}", arp);
                             if let Some(existing) = &mut self.arpeggio {
                                 existing.change_arpeggio(arp)?;
