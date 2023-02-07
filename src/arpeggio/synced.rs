@@ -128,7 +128,13 @@ impl Player {
         } else {
             self.step
         };
-        let ticks_since_start = steps_since_start * self.arpeggio.ticks_per_step - self.wait_ticks;
+        let ticks_since_start = if steps_since_start * self.arpeggio.ticks_per_step <= self.wait_ticks {
+            //TODO fix this properly
+            //println!("Would have overflowed: {} * {} - {}", steps_since_start, self.arpeggio.ticks_per_step, self.wait_ticks);
+            1
+        } else {
+            steps_since_start * self.arpeggio.ticks_per_step - self.wait_ticks
+        };
         self.arpeggio = arpeggio;
         self.step = ((ticks_since_start - 1) / self.arpeggio.ticks_per_step + 1) % self.arpeggio.steps.len();
         self.wait_ticks = self.arpeggio.ticks_per_step - ((ticks_since_start - 1).rem_euclid(self.arpeggio.ticks_per_step) + 1);
