@@ -62,10 +62,16 @@ impl PatternSettings for FixedNotesPerStep {
     }
 }
 
-//TODO more methods for receiving settings:
-// ** (MK4902 preset buttons) MSB/lsb/prog changes
-// ** (RD300NX live set changes) bpm of clock ticks - measure bpm, even number => up, odd number => down
-// ** (RD300NX live set changes) fc1/fc2 set to zero if enabled on each channel (0,1,2) on patch change
-// ^^ by enabling/disabling pedal/fc1/fc2/bend/mod functions on a certain layer (on patch change keys sends default value (0/8192) to each of these)
-// ^^ could use 2 of these (which must NEVER be used, so I guess fc1/fc2 are fairly safe), with 3 layers, thats 6 bits, but one must always be on so it is noticed, so 2^6 - 1 = 63 signals (off + 62 signals)
-// ^^ 3 output channels x 4 directions x 1-5 steps per beat = 60 combos < 62 signals
+//TODO implement methods for receiving settings:
+// - (MK4902 preset buttons) MSB/lsb/prog changes
+// - (RD300NX live set changes) bpm of clock ticks - measure bpm, even number => up, odd number => down
+// - (RD300NX live set changes) fc1/fc2 set to zero if enabled on each channel (0,1,2) on patch change
+// ** by enabling/disabling pedal/fc1/fc2/bend/mod functions on a certain layer (on patch change keys sends default value (0/8192) to each of these)
+// ** could use 2 of these (which must NEVER be used, so I guess fc1/fc2 are fairly safe), with 3 layers, thats 6 bits, but one must always be on so it is noticed, so 2^6 - 1 = 63 signals (off + 62 signals)
+// ** 3 output channels x 4 directions x 1-5 steps per beat = 60 combos < 62 signals
+// - (RD300NX live set changes) follow rhythm output (or should this be a RhythmFollower synced arpeggiator?)
+// ** set keyboard rhythm volume to 0, midi out to ch10, pattern to *something* and turn it on
+// ** handle any note-on for ch10 as triggers for arpeggio steps (rather than clock ticks)
+// ** "learn" pattern in first beat (24 ticks) by determining steps based on there being any notes on during a tick (how we do know where the start of the beat is? only matters on non-even rhythms)
+// ** this determines the number and duration of each step, then when notes are played, they are divided evenly between the steps, with extra notes on earlier steps as required
+// ** this requires reading more note-on from midi_out (which currently just reads clock)

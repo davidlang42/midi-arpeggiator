@@ -11,7 +11,7 @@ use super::{Step, NoteDetails};
 pub struct Arpeggio {
     steps: Vec<(Duration, Step)>,
     period: Duration,
-    finish_steps: bool //TODO could finish_steps be a FinishSettings?
+    finish_steps: bool
 }
 
 impl fmt::Display for Arpeggio {

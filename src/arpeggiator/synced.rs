@@ -78,7 +78,7 @@ impl<'a, S: FinishSettings + PatternSettings> Arpeggiator for PressHold<'a, S> {
     }
 }
 
-pub struct MutatingHold<'a, S: FinishSettings> {
+pub struct MutatingHold<'a, S: FinishSettings> { //TODO need to make first arp of MutatingHold more reliable, it seems to not play the middle note of 3 if I'm not quite fast enough at the roll on
     midi_in: midi::InputDevice,
     midi_out: midi::OutputDevice,
     held_notes: Vec<NoteDetails>,
