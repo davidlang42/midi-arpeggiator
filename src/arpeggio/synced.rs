@@ -120,7 +120,7 @@ impl Player {
 
     pub fn change_arpeggio(&mut self, arpeggio: Arpeggio) -> Result<(), mpsc::SendError<MidiMessage<'static>>>  {
         if let Some(last_index) = self.last_index {
-            self.last_step = Some(self.arpeggio.steps.remove(last_index));
+            self.last_step = Some(self.arpeggio.steps[last_index].clone());
             self.last_index = None;
         }
         let steps_since_start = if self.step == 0 {
@@ -128,16 +128,15 @@ impl Player {
         } else {
             self.step
         };
-        let ticks_since_start = if steps_since_start * self.arpeggio.ticks_per_step <= self.wait_ticks {
-            //TODO fix this properly
-            //println!("Would have overflowed: {} * {} - {}", steps_since_start, self.arpeggio.ticks_per_step, self.wait_ticks);
-            1
+        let ticks_since_start = steps_since_start * self.arpeggio.ticks_per_step - self.wait_ticks;
+        let ticks_since_start_minus_1 = if ticks_since_start == 0 {
+            0
         } else {
-            steps_since_start * self.arpeggio.ticks_per_step - self.wait_ticks
+            ticks_since_start - 1
         };
         self.arpeggio = arpeggio;
-        self.step = ((ticks_since_start - 1) / self.arpeggio.ticks_per_step + 1) % self.arpeggio.steps.len();
-        self.wait_ticks = self.arpeggio.ticks_per_step - ((ticks_since_start - 1).rem_euclid(self.arpeggio.ticks_per_step) + 1);
+        self.step = (ticks_since_start_minus_1 / self.arpeggio.ticks_per_step + 1) % self.arpeggio.steps.len();
+        self.wait_ticks = self.arpeggio.ticks_per_step - (ticks_since_start_minus_1.rem_euclid(self.arpeggio.ticks_per_step) + 1);
         Ok(())
     }
 

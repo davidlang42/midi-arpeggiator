@@ -12,6 +12,7 @@ pub struct NoteDetails {
     pub v: Velocity
 }
 
+#[derive(Clone)]
 pub struct Step {
     notes: Vec<NoteDetails>
 }
