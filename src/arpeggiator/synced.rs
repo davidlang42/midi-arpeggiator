@@ -115,10 +115,12 @@ impl<'a> Arpeggiator for MutatingHold {
                     while i < self.held_notes.len() {
                         if self.held_notes[i].n == n {
                             self.held_notes.remove(i);
-                            self.changed = true;
                         } else {
                             i += 1;
                         }
+                    }
+                    if self.held_notes.len() == 0 {
+                        self.changed = true;
                     }
                 },
                 MidiMessage::TimingClock => {
