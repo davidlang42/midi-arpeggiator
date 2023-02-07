@@ -120,7 +120,7 @@ impl<'a> Arpeggiator for MutatingHold {
                         }
                     }
                     if self.held_notes.len() == 0 {
-                        self.changed = true;
+                        self.changed = true; // only mutate the arp when notes are added or *all* notes are released, otherwise it mutates down to 1 step during release and the arp doesn't finish its cycle
                     }
                 },
                 MidiMessage::TimingClock => {
