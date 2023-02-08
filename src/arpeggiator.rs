@@ -4,6 +4,7 @@ use crate::arpeggio::{NoteDetails, Step};
 pub mod timed;
 pub mod synced;
 
+#[derive(Clone)]
 pub enum Pattern {
     Down,
     Up
@@ -11,6 +12,8 @@ pub enum Pattern {
 }
 
 impl Pattern {
+    pub const OPTIONS: [Self; 2] = [Pattern::Down, Pattern::Up];
+
     pub fn of(&self, mut notes: Vec<NoteDetails>, steps: usize) -> Vec<Step> {
         // put the notes in order based on the pattern type
         match self {
