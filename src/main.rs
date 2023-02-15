@@ -29,30 +29,30 @@ fn main() -> Result<(), Box<dyn Error>> {
     let midi_in = args.next().ok_or("The second argument should be the MIDI IN device file")?;
     let midi_out = args.next().ok_or("The third argument should be the MIDI OUT device file")?;
     let mut midi_clock = || args.next().ok_or("The fourth argument should be the MIDI CLOCK device file");
-    let (input_device, mut arp): (midi::InputDevice, Box<dyn Arpeggiator>) = match mode.as_str() {
+    let (input_device, mut arp): (midi::InputDevice, Box<dyn Arpeggiator<_>>) = match mode.as_str() {
         REPEAT => (InputDevice::open(&midi_in, false)?,
         Box::new(timed::RepeatRecorder::new(
-            OutputDevice::open(&midi_out)?,
+            &OutputDevice::open(&midi_out)?,
             &StopArpeggio::WhenFinished
         ))),
         PEDAL => (InputDevice::open(&midi_in, false)?,
         Box::new(timed::PedalRecorder::new(
-            OutputDevice::open(&midi_out)?,
+            &OutputDevice::open(&midi_out)?,
             &StopArpeggio::Immediately
         ))),
         CLOCK => (InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
         Box::new(synced::MutatingHold::new(
-            OutputDevice::open(&midi_out)?,
+            &OutputDevice::open(&midi_out)?,
             &StopArpeggio::WhenFinished
         ))),
         CLOCK_DOWN => (InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
         Box::new(synced::PressHold::new(
-            OutputDevice::open(&midi_out)?,
+            &OutputDevice::open(&midi_out)?,
             &FixedNotesPerStep(1, Pattern::Down, StopArpeggio::WhenFinished)
         ))),
         CLOCK_UP => (InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
         Box::new(synced::PressHold::new(
-            OutputDevice::open(&midi_out)?,
+            &OutputDevice::open(&midi_out)?,
             &FixedNotesPerStep(1, Pattern::Up, StopArpeggio::WhenFinished)
         ))),
         _ => return Err(format!("Invalid arpeggiator mode: {}", mode).into())

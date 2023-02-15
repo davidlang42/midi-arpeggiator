@@ -10,7 +10,7 @@ use crate::settings::FinishSettings;
 use super::Arpeggiator;
 
 pub struct RepeatRecorder<'a, S: FinishSettings> {
-    midi_out: midi::OutputDevice,
+    midi_out: &'a midi::OutputDevice,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     last_note_off: Option<(Instant, NoteDetails)>,
     arpeggios: HashMap<Note, Player>,
@@ -18,7 +18,7 @@ pub struct RepeatRecorder<'a, S: FinishSettings> {
 }
 
 impl<'a, S: FinishSettings> RepeatRecorder<'a, S> {
-    pub fn new(midi_out: midi::OutputDevice, settings: &'a S) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a S) -> Self {
         Self {
             midi_out,
             held_notes: HashMap::new(),
@@ -29,7 +29,7 @@ impl<'a, S: FinishSettings> RepeatRecorder<'a, S> {
     }
 }
 
-impl<'a, S: FinishSettings> Arpeggiator for RepeatRecorder<'a, S> {
+impl<'a, S: FinishSettings> Arpeggiator<S> for RepeatRecorder<'a, S> {
     fn process(&mut self, received: MidiMessage<'static>) -> Result<(), Box<dyn Error>> {
         match received {
             //TODO handle pedal up/down
@@ -72,10 +72,14 @@ impl<'a, S: FinishSettings> Arpeggiator for RepeatRecorder<'a, S> {
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
         drain_and_wait_for_stop(&mut self.arpeggios)
     }
+
+    fn settings(&self) -> &S {
+        self.settings
+    }
 }
 
 pub struct PedalRecorder<'a, S: FinishSettings> {
-    midi_out: midi::OutputDevice,
+    midi_out: &'a midi::OutputDevice,
     notes: Vec<(Instant, NoteDetails)>,
     thru_notes: HashMap<Note, NoteDetails>,
     pedal: bool,
@@ -85,7 +89,7 @@ pub struct PedalRecorder<'a, S: FinishSettings> {
 }
 
 impl<'a, S: FinishSettings> PedalRecorder<'a, S> {
-    pub fn new(midi_out: midi::OutputDevice, settings: &'a S) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a S) -> Self {
         Self {
             midi_out,
             notes: Vec::new(),
@@ -98,7 +102,7 @@ impl<'a, S: FinishSettings> PedalRecorder<'a, S> {
     }
 }
 
-impl<'a, S: FinishSettings> Arpeggiator for PedalRecorder<'a, S> {
+impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a, S> {
     fn process(&mut self, received: MidiMessage<'static>) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
@@ -164,6 +168,10 @@ impl<'a, S: FinishSettings> Arpeggiator for PedalRecorder<'a, S> {
 
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
         drain_and_wait_for_stop(&mut self.arpeggios)
+    }
+
+    fn settings(&self) -> &S {
+        self.settings
     }
 }
 

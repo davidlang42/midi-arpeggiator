@@ -9,7 +9,7 @@ use crate::settings::{FinishSettings, PatternSettings};
 use super::Arpeggiator;
 
 pub struct PressHold<'a, S: FinishSettings + PatternSettings> {
-    midi_out: midi::OutputDevice,
+    midi_out: &'a midi::OutputDevice,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     arpeggios: Vec<(HashSet<Note>, Player)>,
     settings: &'a S
@@ -18,7 +18,7 @@ pub struct PressHold<'a, S: FinishSettings + PatternSettings> {
 impl<'a, S: FinishSettings + PatternSettings> PressHold<'a, S> {
     const TRIGGER_TIME_MS: u128 = 50;
 
-    pub fn new(midi_out: midi::OutputDevice, settings: &'a S) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a S) -> Self {
         Self {
             midi_out,
             held_notes: HashMap::new(),
@@ -28,7 +28,7 @@ impl<'a, S: FinishSettings + PatternSettings> PressHold<'a, S> {
     }
 }
 
-impl<'a, S: FinishSettings + PatternSettings> Arpeggiator for PressHold<'a, S> {
+impl<'a, S: FinishSettings + PatternSettings> Arpeggiator<S> for PressHold<'a, S> {
     fn process(&mut self, received: MidiMessage<'static>) -> Result<(), Box<dyn Error>> {
         match received {
             //TODO handle pedal up/down
@@ -72,10 +72,14 @@ impl<'a, S: FinishSettings + PatternSettings> Arpeggiator for PressHold<'a, S> {
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
         drain_and_force_stop(&mut self.arpeggios)
     }
+
+    fn settings(&self) -> &S {
+        self.settings
+    }
 }
 
 pub struct MutatingHold<'a, S: FinishSettings> { //TODO need to make first arp of MutatingHold more reliable, it seems to not play the middle note of 3 if I'm not quite fast enough at the roll on
-    midi_out: midi::OutputDevice,
+    midi_out: &'a midi::OutputDevice,
     held_notes: Vec<NoteDetails>,
     changed: bool,
     arpeggio: Option<Player>,
@@ -83,7 +87,7 @@ pub struct MutatingHold<'a, S: FinishSettings> { //TODO need to make first arp o
 }
 
 impl<'a, S: FinishSettings> MutatingHold<'a, S> {
-    pub fn new(midi_out: midi::OutputDevice, settings: &'a S) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a S) -> Self {
         Self {
             midi_out,
             held_notes: Vec::new(),
@@ -94,7 +98,7 @@ impl<'a, S: FinishSettings> MutatingHold<'a, S> {
     }
 }
 
-impl<'a, S: FinishSettings> Arpeggiator for MutatingHold<'a, S> {
+impl<'a, S: FinishSettings> Arpeggiator<S> for MutatingHold<'a, S> {
     fn process(&mut self, received: MidiMessage<'static>) -> Result<(), Box<dyn Error>> {
         match received {
             //TODO handle pedal up/down
@@ -156,6 +160,10 @@ impl<'a, S: FinishSettings> Arpeggiator for MutatingHold<'a, S> {
             self.arpeggio = None;
         }
         Ok(())
+    }
+
+    fn settings(&self) -> &S {
+        self.settings
     }
 }
 

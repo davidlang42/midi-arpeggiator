@@ -1,7 +1,7 @@
 use wmidi::{MidiMessage, U7, ControlFunction};
 
 use crate::arpeggio::{NoteDetails, Step};
-use crate::arpeggiator::Pattern;
+use crate::arpeggiator::{Pattern, ArpeggiatorMode};
 
 pub trait MidiReceiver {
     fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
@@ -15,6 +15,10 @@ pub trait FinishSettings: MidiReceiver {
 
 pub trait PatternSettings: MidiReceiver {
     fn generate_steps(&self, notes: Vec<NoteDetails>) -> Vec<Step>;
+}
+
+pub trait ModeSettings: MidiReceiver {
+    fn get_mode(&self) -> ArpeggiatorMode;
 }
 
 pub enum StopArpeggio {
@@ -94,7 +98,7 @@ impl AllSettings for FixedNotesPerStep { }
 // ** this determines the number and duration of each step, then when notes are played, they are divided evenly between the steps, with extra notes on earlier steps as required
 // ** this requires reading more note-on from midi_out (which currently just reads clock)
 
-trait AllSettings: PatternSettings + FinishSettings { }
+trait AllSettings: PatternSettings + FinishSettings { }//TODO do I need this? if so it should include ModeSettings
 
 pub struct ReceiveProgramChanges {
     settings: Box<dyn AllSettings>,
