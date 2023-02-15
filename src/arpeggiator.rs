@@ -1,5 +1,7 @@
 use std::error::Error;
-use crate::arpeggio::{NoteDetails, Step};
+use wmidi::MidiMessage;
+
+use crate::{arpeggio::{NoteDetails, Step}, midi};
 
 pub mod timed;
 pub mod synced;
@@ -61,6 +63,14 @@ impl Pattern {
 }
 
 pub trait Arpeggiator {
-    fn listen(&mut self) -> Result<(), Box<dyn Error>>;
+    fn process(&mut self, message: MidiMessage<'static>) -> Result<(), Box<dyn Error>>;
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>>;
+
+    fn listen(&mut self, midi_in: midi::InputDevice) -> Result<(), Box<dyn Error>> {
+        for message in &midi_in.receiver {
+            self.process(message)?;
+            //TODO handle abort message
+        }
+        Ok(())
+    }
 }
