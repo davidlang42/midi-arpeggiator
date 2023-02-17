@@ -50,8 +50,8 @@ impl Step {
         Ok(())
     }
 
-    fn highest_note(&self) -> Note {
-        self.notes.iter().map(|d| d.n).max().expect("Steps must have at least 1 note")
+    fn highest_note(&self) -> Option<Note> {
+        self.notes.iter().map(|d| d.n).max()
     }
 
     fn transpose(&self, half_steps: i8) -> Step {
@@ -67,6 +67,12 @@ impl Step {
         }
         Self {
             notes
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            notes: Vec::new()
         }
     }
 

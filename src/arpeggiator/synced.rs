@@ -1,8 +1,9 @@
-use wmidi::{Note, MidiMessage};
+use wmidi::{Note, MidiMessage, ControlFunction};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
+use std::mem;
 use std::time::Instant;
-use crate::midi;
+use crate::midi::{self, TICKS_PER_BEAT};
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggio::synced::{Arpeggio, Player};
 use crate::settings::{FinishSettings, PatternSettings};
@@ -47,7 +48,7 @@ impl<'a, S: FinishSettings + PatternSettings> Arpeggiator<S> for PressHold<'a, S
                 if self.held_notes.len() != 0 && self.held_notes.values().map(|(i, _)| i).min().unwrap().elapsed().as_millis() > Self::TRIGGER_TIME_MS {
                     let note_details: Vec<NoteDetails> = self.held_notes.drain().map(|(_, (_, d))| d).collect();
                     let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
-                    let arp = Arpeggio::from(self.settings.generate_steps(note_details), self.settings.finish_pattern());
+                    let arp = Arpeggio::from_steps(self.settings.generate_steps(note_details), self.settings.finish_pattern());
                     println!("Arp: {}", arp);
                     self.arpeggios.push((note_set, Player::init(arp, &self.midi_out)));
                 }
@@ -62,7 +63,7 @@ impl<'a, S: FinishSettings + PatternSettings> Arpeggiator<S> for PressHold<'a, S
             },
             MidiMessage::Reset => {
                 self.held_notes.clear();
-                drain_and_force_stop(&mut self.arpeggios)?;
+                drain_and_force_stop_vec(&mut self.arpeggios)?;
             },
             _ => {}
         }
@@ -70,7 +71,7 @@ impl<'a, S: FinishSettings + PatternSettings> Arpeggiator<S> for PressHold<'a, S
     }
 
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
-        drain_and_force_stop(&mut self.arpeggios)
+        drain_and_force_stop_vec(&mut self.arpeggios)
     }
 
     fn settings(&self) -> &S {
@@ -127,7 +128,7 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for MutatingHold<'a, S> {
                             existing.stop();
                         }
                     } else {
-                        let arp = Arpeggio::from(self.held_notes.iter().map(|n| Step::note(*n)).collect(), self.settings.finish_pattern());
+                        let arp = Arpeggio::from_steps(self.held_notes.iter().map(|n| Step::note(*n)).collect(), self.settings.finish_pattern());
                         println!("Arp: {}", arp);
                         if let Some(existing) = &mut self.arpeggio {
                             existing.change_arpeggio(arp)?;
@@ -167,18 +168,135 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for MutatingHold<'a, S> {
     }
 }
 
-fn drain_and_force_stop<N>(arpeggios: &mut Vec<(N, Player)>) -> Result<(), Box<dyn Error>> {
-    if arpeggios.len() != 0 {
-        let mut i = arpeggios.len() - 1;
-        loop {
-            arpeggios[i].1.force_stop()?;
-            arpeggios.remove(i);
-            if i == 0 {
-                break;
-            } else {
-                i -= 1;
-            }
-        }
+fn drain_and_force_stop_vec<N>(arpeggios: &mut Vec<(N, Player)>) -> Result<(), Box<dyn Error>> {
+    for (_, player) in arpeggios.drain(0..arpeggios.len()) {
+        player.force_stop()?;
     }
     Ok(())
+}
+
+fn drain_and_force_stop_map<N>(arpeggios: &mut HashMap<N, Player>) -> Result<(), Box<dyn Error>> {
+    for (_, player) in arpeggios.drain() {
+        player.force_stop()?;
+    }
+    Ok(())
+}
+
+pub struct PedalRecorder<'a, S: FinishSettings> {
+    midi_out: &'a midi::OutputDevice,
+    notes: Vec<(usize, NoteDetails)>,
+    ticks_since_last_note: usize,
+    thru_notes: HashMap<Note, NoteDetails>,
+    pedal: bool,
+    arpeggios: HashMap<Note, Player>,
+    recorded: Option<Arpeggio>,
+    settings: &'a S
+}
+
+impl<'a, S: FinishSettings> PedalRecorder<'a, S> {
+    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a S) -> Self {
+        Self {
+            midi_out,
+            notes: Vec::new(),
+            thru_notes: HashMap::new(),
+            ticks_since_last_note: 0,
+            pedal: false,
+            arpeggios: HashMap::new(),
+            recorded: None,
+            settings
+        }
+    }
+}
+
+impl<'a, S: FinishSettings> PedalRecorder<'a, S> {
+    const TICKS_THRESHOLD: usize = TICKS_PER_BEAT / 4; // quarter of a beat (ie. semi-quaver)
+}
+
+impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a, S> {
+    fn process(&mut self, received: MidiMessage<'static>) -> Result<(), Box<dyn Error>> {
+        match received {
+            MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
+                if !self.pedal && u8::from(value) >= 64 {
+                    self.pedal = true;
+                    self.ticks_since_last_note = 0;
+                    self.recorded = None;
+                    for (_, player) in self.arpeggios {
+                        player.stop();
+                    }
+                } else if self.pedal && u8::from(value) < 64 {
+                    self.pedal = false;
+                    for (_, thru_note) in self.thru_notes.drain() {
+                        self.midi_out.sender.send(MidiMessage::NoteOff(thru_note.c, thru_note.n, thru_note.v))?;
+                    }
+                    if self.notes.len() > 0 {
+                        // save recorded arpeggio
+                        let finish = Instant::now();
+                        let notes = mem::replace(&mut self.notes, Vec::new());
+                        let ticks_into_beat = self.ticks_since_last_note % TICKS_PER_BEAT;
+                        if ticks_into_beat >= Self::TICKS_THRESHOLD {
+                            self.ticks_since_last_note += TICKS_PER_BEAT;
+                        }
+                        self.ticks_since_last_note -= ticks_into_beat;
+                        self.recorded = Some(Arpeggio::from_notes(notes, self.ticks_since_last_note, self.settings.finish_pattern()));
+                        // start play in original key
+                        let arp = self.recorded.as_ref().unwrap();
+                        let original = arp.first_note();
+                        let new_arp = arp.transpose(original, original);
+                        self.arpeggios.insert(original, Player::init(new_arp, &self.midi_out));
+                    }
+                }
+            },
+            MidiMessage::NoteOn(c, n, v) => {
+                if self.pedal {
+                    self.midi_out.sender.send(received)?;
+                    let d = NoteDetails { c, n, v };
+                    self.thru_notes.insert(n, d);
+                    self.notes.push((self.ticks_since_last_note, d));
+                    self.ticks_since_last_note = 0;
+                } else if self.arpeggios.contains_key(&n) {
+                    // already playing, do nothing
+                } else if let Some(arp) = &self.recorded {
+                    let original = arp.first_note();
+                    let new_arp = arp.transpose(original, n);
+                    self.arpeggios.insert(n, Player::init(new_arp, &self.midi_out));
+                }
+            },
+            MidiMessage::NoteOff(_, n, _) => {
+                if self.pedal {
+                    self.midi_out.sender.send(received)?;
+                    self.thru_notes.remove(&n);
+                } else if let Some(mut player) = self.arpeggios.get(&n) {
+                    player.stop();
+                }
+            },
+            MidiMessage::TimingClock => {
+                let finished = Vec::new();
+                for (note, player) in self.arpeggios {
+                    if !player.play_tick()? {
+                        finished.push(note);
+                    }
+                }
+                for note in finished {
+                    self.arpeggios.remove(&note);
+                }
+                self.ticks_since_last_note += 1;
+            },
+            MidiMessage::Reset => {
+                self.notes.clear();
+                self.thru_notes.clear();
+                self.pedal = false;
+                drain_and_force_stop_map(&mut self.arpeggios)?;
+            },
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
+        drain_and_force_stop_map(&mut self.arpeggios)
+    }
+
+    fn settings(&self) -> &S {
+        self.settings
+    }
 }
