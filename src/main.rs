@@ -63,10 +63,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         ).listen(InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?),
         MULTI => MultiArpeggiator::new(
             &OutputDevice::open(&midi_out)?,
-            &mut ReceiveProgramChanges::new()
+            ReceiveProgramChanges::new()
         ).listen(InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?),
         _ => return Err(format!("Invalid arpeggiator mode: {}", mode).into())
-    };
+    }
     //TODO make this stop on ESC pressed (or any key?)
-    Ok(())
 }

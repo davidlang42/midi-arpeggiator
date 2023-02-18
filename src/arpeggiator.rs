@@ -3,7 +3,7 @@ use wmidi::MidiMessage;
 
 use strum_macros::EnumIter;
 
-use crate::{arpeggio::{NoteDetails, Step}, midi, settings::{FinishSettings, PatternSettings, MidiReceiver, ModeSettings}};
+use crate::{arpeggio::{NoteDetails, Step}, midi, settings::{ModeSettings, PatternSettings, FinishSettings}};
 
 pub mod timed;
 pub mod synced;
@@ -62,16 +62,13 @@ impl Pattern {
     }
 }
 
-pub trait Arpeggiator<S: MidiReceiver> {
+pub trait Arpeggiator {
     fn process(&mut self, message: MidiMessage<'static>) -> Result<(), Box<dyn Error>>;
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>>;
-    fn settings(&mut self) -> &mut S;
 
     fn listen(&mut self, midi_in: midi::InputDevice) -> Result<(), Box<dyn Error>> {
         for message in &midi_in.receiver {
-            if let Some(passed_thru) = self.settings().passthrough_midi(message) {
-                self.process(passed_thru)?;
-            }
+            self.process(message)?;
             //TODO handle abort message
         }
         Ok(())
@@ -88,7 +85,7 @@ pub enum ArpeggiatorMode {
 }
 
 impl ArpeggiatorMode {
-    fn create<'a, S: FinishSettings + PatternSettings>(&self, midi_out: &'a midi::OutputDevice, settings: &'a mut S) -> Box<dyn Arpeggiator<S> + 'a> {
+    fn create<'a, S: PatternSettings + FinishSettings>(&self, midi_out: &'a midi::OutputDevice, settings: &'a S) -> Box<dyn Arpeggiator + 'a> {
         match self {
             Self::MutatingHold => Box::new(synced::MutatingHold::new(midi_out, settings)),
             Self::PressHold => Box::new(synced::PressHold::new(midi_out, settings)),
@@ -99,41 +96,33 @@ impl ArpeggiatorMode {
     }
 }
 
-pub struct MultiArpeggiator<'a, S: FinishSettings + PatternSettings + ModeSettings> {
-    current: Box<dyn Arpeggiator<S> + 'a>,
-    mode: ArpeggiatorMode,
+pub struct MultiArpeggiator<'a, S: ModeSettings> {
     midi_out: &'a midi::OutputDevice,
-    settings: &'a mut S
+    settings: S
 }
 
-impl<'a, S: FinishSettings + PatternSettings + ModeSettings> MultiArpeggiator<'a, S> {
-    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a mut S) -> Self {
-        let mode = settings.get_mode();
+impl<'a, S: ModeSettings> MultiArpeggiator<'a, S> {
+    pub fn new(midi_out: &'a midi::OutputDevice, settings: S) -> Self {
         Self {
-            mode,
             midi_out,
-            settings,
-            current: mode.create(midi_out, settings)
+            settings
         }
     }
-}
 
-impl<'a, S: FinishSettings + PatternSettings + ModeSettings> Arpeggiator<S> for MultiArpeggiator<'a, S> {
-    fn process(&mut self, message: MidiMessage<'static>) -> Result<(), Box<dyn Error>> {
-        let new_mode = self.settings.get_mode();
-        if new_mode != self.mode {
-            self.mode = new_mode;
-            self.current.stop_arpeggios();
-            self.current = self.mode.create(self.midi_out, self.settings);
+    pub fn listen(self, midi_in: midi::InputDevice) -> Result<(), Box<dyn Error>> {
+        let mut mode = self.settings.get_mode();
+        let mut current: Box<dyn Arpeggiator> = mode.create(self.midi_out, &self.settings);
+        for message in &midi_in.receiver {
+            //TODO setting.passthru midi is never called, need a better structure of how to handle this
+            let new_mode = self.settings.get_mode();
+            if new_mode != mode {
+                mode = new_mode;
+                current.stop_arpeggios()?;
+                current = new_mode.create(self.midi_out, &self.settings);
+            }
+            current.process(message)?;
+            //TODO handle abort message
         }
-        self.current.process(message)
-    }
-
-    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
-        self.current.stop_arpeggios()
-    }
-
-    fn settings(&mut self) -> &'a mut S {
-        &mut self.settings
+        Ok(())
     }
 }
