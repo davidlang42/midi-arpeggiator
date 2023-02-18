@@ -55,10 +55,12 @@ impl Arpeggio {
     }
 
     pub fn first_note(&self) -> Note {
-        if self.steps.len() == 0 {
-            panic!("Arpeggios must have at least 1 step");
+        for (_, step) in &self.steps {
+            if let Some(note) = step.highest_note() {
+                return note;
+            }
         }
-        self.steps[0].1.highest_note()
+        panic!("Arpeggio did not contain any notes");
     }
 
     pub fn from(notes: Vec<(Instant, NoteDetails)>, finish: Instant, finish_steps: bool) -> Self {

@@ -14,11 +14,11 @@ pub struct RepeatRecorder<'a, S: FinishSettings> {
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     last_note_off: Option<(Instant, NoteDetails)>,
     arpeggios: HashMap<Note, Player>,
-    settings: &'a S
+    settings: &'a mut S
 }
 
 impl<'a, S: FinishSettings> RepeatRecorder<'a, S> {
-    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a S) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a mut S) -> Self {
         Self {
             midi_out,
             held_notes: HashMap::new(),
@@ -73,7 +73,7 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for RepeatRecorder<'a, S> {
         drain_and_wait_for_stop(&mut self.arpeggios)
     }
 
-    fn settings(&self) -> &S {
+    fn settings(&mut self) -> &'a mut S {
         self.settings
     }
 }
@@ -85,11 +85,11 @@ pub struct PedalRecorder<'a, S: FinishSettings> {
     pedal: bool,
     arpeggios: HashMap<Note, Player>,
     recorded: Option<Arpeggio>,
-    settings: &'a S
+    settings: &'a mut S
 }
 
 impl<'a, S: FinishSettings> PedalRecorder<'a, S> {
-    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a S) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a mut S) -> Self {
         Self {
             midi_out,
             notes: Vec::new(),
@@ -170,8 +170,8 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a, S> {
         drain_and_wait_for_stop(&mut self.arpeggios)
     }
 
-    fn settings(&self) -> &S {
-        self.settings
+    fn settings(&mut self) -> &mut S {
+        &mut self.settings
     }
 }
 

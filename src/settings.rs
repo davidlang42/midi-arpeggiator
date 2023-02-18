@@ -1,4 +1,5 @@
 use wmidi::{MidiMessage, U7, ControlFunction};
+use strum::IntoEnumIterator;
 
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggiator::{Pattern, ArpeggiatorMode};
@@ -13,11 +14,11 @@ pub trait FinishSettings: MidiReceiver {
     fn finish_pattern(&self) -> bool;
 }
 
-pub trait PatternSettings: MidiReceiver {
+pub trait PatternSettings: FinishSettings {
     fn generate_steps(&self, notes: Vec<NoteDetails>) -> Vec<Step>;
 }
 
-pub trait ModeSettings: MidiReceiver {
+pub trait ModeSettings: PatternSettings {
     fn get_mode(&self) -> ArpeggiatorMode;
 }
 
@@ -53,8 +54,6 @@ impl PatternSettings for FixedSteps {
 
 impl MidiReceiver for FixedSteps { }
 
-impl AllSettings for FixedSteps { }
-
 pub struct FixedNotesPerStep(pub usize, pub Pattern, pub StopArpeggio);
 
 impl FinishSettings for FixedNotesPerStep {
@@ -82,10 +81,7 @@ impl PatternSettings for FixedNotesPerStep {
 
 impl MidiReceiver for FixedNotesPerStep { }
 
-impl AllSettings for FixedNotesPerStep { }
-
 //TODO implement methods for receiving settings:
-// - (MK4902 preset buttons) MSB/lsb/prog changes
 // - (RD300NX live set changes) bpm of clock ticks - measure bpm, even number => up, odd number => down
 // - (RD300NX live set changes) fc1/fc2 set to zero if enabled on each channel (0,1,2) on patch change
 // ** by enabling/disabling pedal/fc1/fc2/bend/mod functions on a certain layer (on patch change keys sends default value (0/8192) to each of these)
@@ -98,10 +94,9 @@ impl AllSettings for FixedNotesPerStep { }
 // ** this determines the number and duration of each step, then when notes are played, they are divided evenly between the steps, with extra notes on earlier steps as required
 // ** this requires reading more note-on from midi_out (which currently just reads clock)
 
-trait AllSettings: PatternSettings + FinishSettings { }//TODO do I need this? if so it should include ModeSettings
-
 pub struct ReceiveProgramChanges {
-    settings: Box<dyn AllSettings>,
+    mode: ArpeggiatorMode,
+    settings: Box<dyn PatternSettings>,
     msb: U7,
     lsb: U7,
     pc: U7
@@ -119,6 +114,12 @@ impl PatternSettings for ReceiveProgramChanges {
     }
 }
 
+impl ModeSettings for ReceiveProgramChanges {
+    fn get_mode(&self) -> ArpeggiatorMode {
+        self.mode
+    }
+}
+
 impl MidiReceiver for ReceiveProgramChanges {
     fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
         match message {
@@ -132,7 +133,7 @@ impl MidiReceiver for ReceiveProgramChanges {
             },
             MidiMessage::ProgramChange(_, pc) => {
                 self.pc = pc;
-                self.settings = Self::select_program(self.msb, self.lsb, self.pc);
+                (self.mode, self.settings) = Self::select_program(self.msb, self.lsb, self.pc);
                 None
             },
             _ => Some(message)
@@ -149,33 +150,48 @@ impl ReceiveProgramChanges {
         let msb = U7::from_u8_lossy(Self::DEFAULT_MSB);
         let lsb = U7::from_u8_lossy(Self::DEFAULT_LSB);
         let pc = U7::from_u8_lossy(Self::DEFAULT_PC);
-        let settings = Self::select_program(msb, lsb, pc);
+        let (mode, settings) = Self::select_program(msb, lsb, pc);
         Self {
             msb,
             lsb,
             pc,
+            mode,
             settings
         }
     }
 
-    fn select_program(msb: U7, lsb: U7, pc: U7) -> Box<dyn AllSettings> {
-        // Program Change represents basic settings:
-        // - finish (bits 0-2)
-        // - pattern (bits 3-6)
-        // Bank Select MSB is used for fixed steps (LSB==0):
-        // - fixed steps 1-24
-        // Bank Select LSB is used for fixed notes (MSB==0):
-        // - fixed notes per step 1-127
-        let pc_u8: u8 = pc.into();
-        if Pattern::OPTIONS.len() > 63 {
-            panic!("Too many patterns, not enough space left in U7 for finish flag");
-        }
-        let pattern = Pattern::OPTIONS[pc_u8 as usize % Pattern::OPTIONS.len()].clone();
-        let finish = if pc_u8 as usize > Pattern::OPTIONS.len() { StopArpeggio::WhenFinished } else { StopArpeggio::Immediately };
-        match (msb.into(), lsb.into()) {
-            (0, lsb_u8) => Box::new(FixedNotesPerStep(lsb_u8 as usize, pattern, finish)),
-            (msb_u8, 0) => Box::new(FixedSteps(msb_u8 as usize, pattern, finish)),
-            _ => Box::new(FixedSteps(1, Pattern::Down, StopArpeggio::Immediately)) // fallback
-        }
+    fn select_program(msb: U7, lsb: U7, pc: U7) -> (ArpeggiatorMode, Box<dyn PatternSettings>) {
+        // Bank Select MSB is used for ModeSettings:
+        // - 0-127 = ArpeggiatorMode
+        // Bank Select LSB is used for PatternSettings type:
+        // - 0-63 (first bit=0) for Fixed Steps (1-24)
+        // - 64-127 (first bit=1) for Fixed Notes per step (1-63)
+        // Program Change represents PatternSettings direction & FinishSettings:
+        // - 0-63 (first bit=0) for StopImmediately, Pattern direction (0-63)
+        // - 1-127 (first bit=1) for FinishSteps, Pattern direction (0-63)
+        let pc_u8 = u8::from(pc) as usize;
+        let (finish, pattern) = if pc_u8 < 64 {
+            (StopArpeggio::Immediately, Pattern::iter().nth(pc_u8 % Pattern::iter().len()).unwrap())
+        } else {
+            (StopArpeggio::WhenFinished, Pattern::iter().nth((pc_u8 - 64) % Pattern::iter().len()).unwrap())
+        };
+        let lsb_u8 = u8::from(lsb) as usize;
+        let settings: Box<dyn PatternSettings> = if lsb_u8 < 64 {
+            Box::new(FixedSteps(cap_range(lsb_u8, 1, 24), pattern, finish))
+        } else {
+            Box::new(FixedNotesPerStep(cap_range(lsb_u8 - 64, 1, 63), pattern, finish))
+        };
+        let mode = ArpeggiatorMode::iter().nth(u8::from(msb) as usize % ArpeggiatorMode::iter().len()).unwrap();
+        (mode, settings)
+    }
+}
+
+fn cap_range(value: usize, min: usize, max: usize) -> usize {
+    if value < min {
+        min
+    } else if value > max {
+        max
+    } else {
+        value
     }
 }

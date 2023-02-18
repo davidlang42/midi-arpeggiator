@@ -27,7 +27,7 @@ impl fmt::Display for Arpeggio {
 
 impl Arpeggio {
     pub fn first_note(&self) -> Note {
-        for (_, step) in self.steps {
+        for (_, step) in &self.steps {
             if let Some(note) = step.highest_note() {
                 return note;
             }
@@ -56,7 +56,7 @@ impl Arpeggio {
         if notes.len() == 0 {
             panic!("Cannot construct an Arpeggio without any notes");
         }
-        let steps = Vec::with_capacity(notes.len() + 1);
+        let mut steps = Vec::with_capacity(notes.len() + 1);
         let mut next_step = Step::empty();
         let mut total_ticks = ticks_after_last_note;
         for (ticks_since_last_note, note) in notes {
@@ -132,7 +132,7 @@ impl Player {
             if self.should_stop && self.step == 0 {
                 return Ok(false);
             }
-            let (wait_ticks, step) = self.arpeggio.steps[self.step];
+            let (wait_ticks, step) = &self.arpeggio.steps[self.step];
             step.send_on(&self.midi_out)?;
             self.last_step = OptionIndex::SomeIndex(self.step);
             if self.step == self.arpeggio.steps.len() - 1 {
@@ -140,7 +140,7 @@ impl Player {
             } else {
                 self.step += 1;
             }
-            self.wait_ticks = wait_ticks;
+            self.wait_ticks = *wait_ticks;
         }
         self.wait_ticks -= 1;
         Ok(true)

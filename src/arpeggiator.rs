@@ -1,12 +1,14 @@
 use std::error::Error;
 use wmidi::MidiMessage;
 
+use strum_macros::EnumIter;
+
 use crate::{arpeggio::{NoteDetails, Step}, midi, settings::{FinishSettings, PatternSettings, MidiReceiver, ModeSettings}};
 
 pub mod timed;
 pub mod synced;
 
-#[derive(Clone)]
+#[derive(Clone, EnumIter)]
 pub enum Pattern {
     Down,
     Up
@@ -14,8 +16,6 @@ pub enum Pattern {
 }
 
 impl Pattern {
-    pub const OPTIONS: [Self; 2] = [Pattern::Down, Pattern::Up];
-
     pub fn of(&self, mut notes: Vec<NoteDetails>, steps: usize) -> Vec<Step> {
         // put the notes in order based on the pattern type
         match self {
@@ -65,7 +65,7 @@ impl Pattern {
 pub trait Arpeggiator<S: MidiReceiver> {
     fn process(&mut self, message: MidiMessage<'static>) -> Result<(), Box<dyn Error>>;
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>>;
-    fn settings(&self) -> &S;
+    fn settings(&mut self) -> &mut S;
 
     fn listen(&mut self, midi_in: midi::InputDevice) -> Result<(), Box<dyn Error>> {
         for message in &midi_in.receiver {
@@ -78,34 +78,36 @@ pub trait Arpeggiator<S: MidiReceiver> {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, EnumIter, Copy, Clone)]
 pub enum ArpeggiatorMode {
     RepeatRecorder,
-    PedalRecorder,
+    TimedPedalRecorder,
     PressHold,
-    MutatingHold
+    MutatingHold,
+    SyncedPedalRecorder
 }
 
 impl ArpeggiatorMode {
-    fn create<'a, S: FinishSettings + PatternSettings>(&self, midi_out: &'a midi::OutputDevice, settings: &'a S) -> Box<dyn Arpeggiator<S>> {
+    fn create<'a, S: FinishSettings + PatternSettings>(&self, midi_out: &'a midi::OutputDevice, settings: &'a mut S) -> Box<dyn Arpeggiator<S> + 'a> {
         match self {
             Self::MutatingHold => Box::new(synced::MutatingHold::new(midi_out, settings)),
             Self::PressHold => Box::new(synced::PressHold::new(midi_out, settings)),
-            Self::PedalRecorder => Box::new(timed::PedalRecorder::new(midi_out, settings)),
-            Self::RepeatRecorder => Box::new(timed::RepeatRecorder::new(midi_out, settings))
+            Self::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out, settings)),
+            Self::RepeatRecorder => Box::new(timed::RepeatRecorder::new(midi_out, settings)),
+            Self::SyncedPedalRecorder => Box::new(synced::PedalRecorder::new(midi_out, settings))
         }
     }
 }
 
 pub struct MultiArpeggiator<'a, S: FinishSettings + PatternSettings + ModeSettings> {
-    current: Box<dyn Arpeggiator<S>>,
+    current: Box<dyn Arpeggiator<S> + 'a>,
     mode: ArpeggiatorMode,
     midi_out: &'a midi::OutputDevice,
-    settings: &'a S
+    settings: &'a mut S
 }
 
 impl<'a, S: FinishSettings + PatternSettings + ModeSettings> MultiArpeggiator<'a, S> {
-    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a S) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a mut S) -> Self {
         let mode = settings.get_mode();
         Self {
             mode,
@@ -131,7 +133,7 @@ impl<'a, S: FinishSettings + PatternSettings + ModeSettings> Arpeggiator<S> for 
         self.current.stop_arpeggios()
     }
 
-    fn settings(&self) -> &S {
-        self.settings
+    fn settings(&mut self) -> &'a mut S {
+        &mut self.settings
     }
 }
