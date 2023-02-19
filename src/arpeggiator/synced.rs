@@ -12,25 +12,23 @@ use super::Arpeggiator;
 pub struct PressHold<'a> {
     midi_out: &'a midi::OutputDevice,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
-    arpeggios: Vec<(HashSet<Note>, Player)>,
-    settings: &'a dyn PatternSettings
+    arpeggios: Vec<(HashSet<Note>, Player)>
 }
 
 impl<'a> PressHold<'a> {
     const TRIGGER_TIME_MS: u128 = 50;
 
-    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a dyn PatternSettings) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
             midi_out,
             held_notes: HashMap::new(),
-            arpeggios: Vec::new(),
-            settings
+            arpeggios: Vec::new()
         }
     }
 }
 
-impl<'a> Arpeggiator for PressHold<'a> {
-    fn process(&mut self, received: MidiMessage<'static>) -> Result<(), Box<dyn Error>> {
+impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
             //TODO handle pedal up/down
             MidiMessage::NoteOn(c, n, v) => {
@@ -48,7 +46,7 @@ impl<'a> Arpeggiator for PressHold<'a> {
                 if self.held_notes.len() != 0 && self.held_notes.values().map(|(i, _)| i).min().unwrap().elapsed().as_millis() > Self::TRIGGER_TIME_MS {
                     let note_details: Vec<NoteDetails> = self.held_notes.drain().map(|(_, (_, d))| d).collect();
                     let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
-                    let arp = Arpeggio::from_steps(self.settings.generate_steps(note_details), self.settings.finish_pattern());
+                    let arp = Arpeggio::from_steps(settings.generate_steps(note_details), settings.finish_pattern());
                     println!("Arp: {}", arp);
                     self.arpeggios.push((note_set, Player::init(arp, &self.midi_out)));
                 }
@@ -80,23 +78,21 @@ pub struct MutatingHold<'a> { //TODO need to make first arp of MutatingHold more
     held_notes: Vec<NoteDetails>,
     changed: bool,
     arpeggio: Option<Player>,
-    settings: &'a dyn FinishSettings
 }
 
 impl<'a> MutatingHold<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a dyn FinishSettings) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
             midi_out,
             held_notes: Vec::new(),
             changed: false,
-            arpeggio: None,
-            settings
+            arpeggio: None
         }
     }
 }
 
-impl<'a> Arpeggiator for MutatingHold<'a> {
-    fn process(&mut self, received: MidiMessage<'static>) -> Result<(), Box<dyn Error>> {
+impl<'a, S: FinishSettings> Arpeggiator<S> for MutatingHold<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
             //TODO handle pedal up/down
             MidiMessage::NoteOn(c, n, v) => {
@@ -124,7 +120,7 @@ impl<'a> Arpeggiator for MutatingHold<'a> {
                             existing.stop();
                         }
                     } else {
-                        let arp = Arpeggio::from_steps(self.held_notes.iter().map(|n| Step::note(*n)).collect(), self.settings.finish_pattern());
+                        let arp = Arpeggio::from_steps(self.held_notes.iter().map(|n| Step::note(*n)).collect(), settings.finish_pattern());
                         println!("Arp: {}", arp);
                         if let Some(existing) = &mut self.arpeggio {
                             existing.change_arpeggio(arp)?;
@@ -181,12 +177,11 @@ pub struct PedalRecorder<'a> {
     thru_notes: HashMap<Note, NoteDetails>,
     pedal: bool,
     arpeggios: HashMap<Note, Player>,
-    recorded: Option<Arpeggio>,
-    settings: &'a dyn FinishSettings
+    recorded: Option<Arpeggio>
 }
 
 impl<'a> PedalRecorder<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a dyn FinishSettings) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
             midi_out,
             notes: Vec::new(),
@@ -194,8 +189,7 @@ impl<'a> PedalRecorder<'a> {
             ticks_since_last_note: 0,
             pedal: false,
             arpeggios: HashMap::new(),
-            recorded: None,
-            settings
+            recorded: None
         }
     }
 }
@@ -204,8 +198,8 @@ impl<'a> PedalRecorder<'a> {
     const TICKS_THRESHOLD: usize = TICKS_PER_BEAT / 4; // quarter of a beat (ie. semi-quaver)
 }
 
-impl<'a> Arpeggiator for PedalRecorder<'a> {
-    fn process(&mut self, received: MidiMessage<'static>) -> Result<(), Box<dyn Error>> {
+impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 if !self.pedal && u8::from(value) >= 64 {
@@ -228,7 +222,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                             self.ticks_since_last_note += TICKS_PER_BEAT;
                         }
                         self.ticks_since_last_note -= ticks_into_beat;
-                        self.recorded = Some(Arpeggio::from_notes(notes, self.ticks_since_last_note, self.settings.finish_pattern()));
+                        self.recorded = Some(Arpeggio::from_notes(notes, self.ticks_since_last_note, settings.finish_pattern()));
                         // start play in original key
                         let arp = self.recorded.as_ref().unwrap();
                         let original = arp.first_note();

@@ -3,7 +3,9 @@ use wmidi::MidiMessage;
 
 use strum_macros::EnumIter;
 
-use crate::{arpeggio::{NoteDetails, Step}, midi, settings::{ModeSettings, PatternSettings, FinishSettings}};
+use crate::arpeggio::{NoteDetails, Step};
+use crate::midi;
+use crate::settings::{ModeSettings, MidiReceiver};
 
 pub mod timed;
 pub mod synced;
@@ -62,13 +64,15 @@ impl Pattern {
     }
 }
 
-pub trait Arpeggiator {
-    fn process(&mut self, message: MidiMessage<'static>) -> Result<(), Box<dyn Error>>;
+pub trait Arpeggiator<S: MidiReceiver> {
+    fn process(&mut self, message: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>>;
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>>;
 
-    fn listen(&mut self, midi_in: midi::InputDevice) -> Result<(), Box<dyn Error>> {
+    fn listen(&mut self, midi_in: midi::InputDevice, mut settings: S) -> Result<(), Box<dyn Error>> {
         for message in &midi_in.receiver {
-            self.process(message)?;
+            if let Some(pass_through) = settings.passthrough_midi(message) {
+                self.process(pass_through, &settings)?;
+            }
             //TODO handle abort message
         }
         Ok(())
@@ -85,42 +89,42 @@ pub enum ArpeggiatorMode {
 }
 
 impl ArpeggiatorMode {
-    fn create<'a, S: PatternSettings + FinishSettings>(&self, midi_out: &'a midi::OutputDevice, settings: &'a S) -> Box<dyn Arpeggiator + 'a> {
+    fn create<'a, S: ModeSettings>(&self, midi_out: &'a midi::OutputDevice) -> Box<dyn Arpeggiator<S> + 'a> {
         match self {
-            Self::MutatingHold => Box::new(synced::MutatingHold::new(midi_out, settings)),
-            Self::PressHold => Box::new(synced::PressHold::new(midi_out, settings)),
-            Self::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out, settings)),
-            Self::RepeatRecorder => Box::new(timed::RepeatRecorder::new(midi_out, settings)),
-            Self::SyncedPedalRecorder => Box::new(synced::PedalRecorder::new(midi_out, settings))
+            Self::MutatingHold => Box::new(synced::MutatingHold::new(midi_out)),
+            Self::PressHold => Box::new(synced::PressHold::new(midi_out)),
+            Self::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out)),
+            Self::RepeatRecorder => Box::new(timed::RepeatRecorder::new(midi_out)),
+            Self::SyncedPedalRecorder => Box::new(synced::PedalRecorder::new(midi_out))
         }
     }
 }
 
-pub struct MultiArpeggiator<'a, S: ModeSettings> {
-    midi_out: &'a midi::OutputDevice,
-    settings: S
+pub struct MultiArpeggiator<'a> {
+    midi_out: &'a midi::OutputDevice
 }
 
-impl<'a, S: ModeSettings> MultiArpeggiator<'a, S> {
-    pub fn new(midi_out: &'a midi::OutputDevice, settings: S) -> Self {
+impl<'a> MultiArpeggiator<'a> {
+    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
-            midi_out,
-            settings
+            midi_out
         }
     }
 
-    pub fn listen(self, midi_in: midi::InputDevice) -> Result<(), Box<dyn Error>> {
-        let mut mode = self.settings.get_mode();
-        let mut current: Box<dyn Arpeggiator> = mode.create(self.midi_out, &self.settings);
+    pub fn listen<S: ModeSettings>(self, midi_in: midi::InputDevice, mut settings: S) -> Result<(), Box<dyn Error>> {
+        let mut mode = settings.get_mode();
+        let mut current: Box<dyn Arpeggiator<S>> = mode.create(self.midi_out);
         for message in &midi_in.receiver {
-            //TODO setting.passthru midi is never called, need a better structure of how to handle this
-            let new_mode = self.settings.get_mode();
+            let pass_through = settings.passthrough_midi(message);
+            let new_mode = settings.get_mode();
             if new_mode != mode {
                 mode = new_mode;
                 current.stop_arpeggios()?;
-                current = new_mode.create(self.midi_out, &self.settings);
+                current = new_mode.create(self.midi_out);
             }
-            current.process(message)?;
+            if let Some(passed_through) = pass_through {
+                current.process(passed_through, &settings)?;
+            }
             //TODO handle abort message
         }
         Ok(())

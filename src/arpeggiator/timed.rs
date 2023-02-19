@@ -13,24 +13,22 @@ pub struct RepeatRecorder<'a> {
     midi_out: &'a midi::OutputDevice,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     last_note_off: Option<(Instant, NoteDetails)>,
-    arpeggios: HashMap<Note, Player>,
-    settings: &'a dyn FinishSettings
+    arpeggios: HashMap<Note, Player>
 }
 
 impl<'a> RepeatRecorder<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a dyn FinishSettings) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
             midi_out,
             held_notes: HashMap::new(),
             last_note_off: None,
-            arpeggios: HashMap::new(),
-            settings
+            arpeggios: HashMap::new()
         }
     }
 }
 
-impl<'a> Arpeggiator for RepeatRecorder<'a> {
-    fn process(&mut self, received: MidiMessage<'static>) -> Result<(), Box<dyn Error>> {
+impl<'a, S: FinishSettings> Arpeggiator<S> for RepeatRecorder<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
             //TODO handle pedal up/down
             MidiMessage::NoteOn(c, n, v) => {
@@ -42,7 +40,7 @@ impl<'a> Arpeggiator for RepeatRecorder<'a> {
                         let mut notes: Vec<(Instant, NoteDetails)> = self.held_notes.drain().map(|(_, v)| v).collect();
                         notes.push((*first_i, *first));
                         notes.sort_by(|(a, _), (b, _)| a.cmp(&b));
-                        let arp = Arpeggio::from(notes, finish, self.settings.finish_pattern());
+                        let arp = Arpeggio::from(notes, finish, settings.finish_pattern());
                         self.arpeggios.insert(n, Player::start(arp, &self.midi_out)?);
                     },
                     _ => {
@@ -80,26 +78,24 @@ pub struct PedalRecorder<'a> {
     thru_notes: HashMap<Note, NoteDetails>,
     pedal: bool,
     arpeggios: HashMap<Note, Player>,
-    recorded: Option<Arpeggio>,
-    settings: &'a dyn FinishSettings
+    recorded: Option<Arpeggio>
 }
 
 impl<'a> PedalRecorder<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, settings: &'a dyn FinishSettings) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
             midi_out,
             notes: Vec::new(),
             thru_notes: HashMap::new(),
             pedal: false,
             arpeggios: HashMap::new(),
-            recorded: None,
-            settings
+            recorded: None
         }
     }
 }
 
-impl<'a> Arpeggiator for PedalRecorder<'a> {
-    fn process(&mut self, received: MidiMessage<'static>) -> Result<(), Box<dyn Error>> {
+impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 if u8::from(value) >= 64 {
@@ -117,7 +113,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                         // save recorded arpeggio
                         let finish = Instant::now();
                         let notes = mem::replace(&mut self.notes, Vec::new());
-                        self.recorded = Some(Arpeggio::from(notes, finish, self.settings.finish_pattern()));
+                        self.recorded = Some(Arpeggio::from(notes, finish, settings.finish_pattern()));
                         // start play in original key
                         let arp = self.recorded.as_ref().unwrap();
                         let original = arp.first_note();
