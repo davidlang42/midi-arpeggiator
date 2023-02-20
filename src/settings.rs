@@ -22,6 +22,7 @@ pub trait ModeSettings: PatternSettings {
     fn get_mode(&self) -> ArpeggiatorMode;
 }
 
+#[derive(Debug)]
 pub enum StopArpeggio {
     Immediately,
     WhenFinished
@@ -161,6 +162,16 @@ impl ReceiveProgramChanges {
     }
 
     fn select_program(msb: U7, lsb: U7, pc: U7) -> (ArpeggiatorMode, Box<dyn PatternSettings>) {
+        //let (msb_u8, lsb_u8, pc_u8) = (u8::from(msb) as usize, u8::from(lsb) as usize, u8::from(pc) as usize);
+        //TODO shitty hack for testing
+        let (msb_u8, lsb_u8, pc_u8) = match (u8::from(msb) as usize, u8::from(lsb) as usize, u8::from(pc) as usize) {
+            (0, 0, 0) => (2, 4, 64),
+            (0, 0, 1) => (2, 3, 65),
+            (0, 0, 2) => (2, 1, 0),
+            (0, 0, 3) => (4, 0, 0),
+            _ => (0, 0, 0)
+        };
+        println!("Settings change: MSB {}, LSB {}, PC {}", msb_u8, lsb_u8, pc_u8);//TODO confirm all existing printlns to proper status
         // Bank Select MSB is used for ModeSettings:
         // - 0-127 = ArpeggiatorMode
         // Bank Select LSB is used for PatternSettings type:
@@ -169,19 +180,23 @@ impl ReceiveProgramChanges {
         // Program Change represents PatternSettings direction & FinishSettings:
         // - 0-63 (first bit=0) for StopImmediately, Pattern direction (0-63)
         // - 64-127 (first bit=1) for FinishSteps, Pattern direction (0-63)
-        let pc_u8 = u8::from(pc) as usize;
         let (finish, pattern) = if pc_u8 < 64 {
             (StopArpeggio::Immediately, Pattern::iter().nth(pc_u8 % Pattern::iter().len()).unwrap())
         } else {
             (StopArpeggio::WhenFinished, Pattern::iter().nth((pc_u8 - 64) % Pattern::iter().len()).unwrap())
         };
-        let lsb_u8 = u8::from(lsb) as usize;
+        println!("{:?}", finish);
+        println!("{:?}", pattern);
+        
         let settings: Box<dyn PatternSettings> = if lsb_u8 < 64 {
+            println!("FixedSteps({})", cap_range(lsb_u8, 1, 24));
             Box::new(FixedSteps(cap_range(lsb_u8, 1, 24), pattern, finish))
         } else {
+            println!("FixedNotesPerSteps({})", cap_range(lsb_u8 - 64, 1, 63));
             Box::new(FixedNotesPerStep(cap_range(lsb_u8 - 64, 1, 63), pattern, finish))
         };
-        let mode = ArpeggiatorMode::iter().nth(u8::from(msb) as usize % ArpeggiatorMode::iter().len()).unwrap();
+        let mode = ArpeggiatorMode::iter().nth(msb_u8 % ArpeggiatorMode::iter().len()).unwrap();
+        println!("{:?}", mode);
         (mode, settings)
     }
 }

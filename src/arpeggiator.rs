@@ -10,7 +10,7 @@ use crate::settings::{ModeSettings, MidiReceiver};
 pub mod timed;
 pub mod synced;
 
-#[derive(Clone, EnumIter)]
+#[derive(Clone, EnumIter, Debug)]
 pub enum Pattern {
     Up,
     Down
@@ -79,7 +79,7 @@ pub trait Arpeggiator<S: MidiReceiver> {
     }
 }
 
-#[derive(PartialEq, EnumIter, Copy, Clone)]
+#[derive(PartialEq, EnumIter, Copy, Clone, Debug)]
 pub enum ArpeggiatorMode {
     RepeatRecorder,
     TimedPedalRecorder,
