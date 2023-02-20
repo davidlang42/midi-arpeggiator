@@ -100,7 +100,10 @@ pub struct ReceiveProgramChanges {
     settings: Box<dyn PatternSettings>,
     msb: U7,
     lsb: U7,
-    pc: U7
+    pc: U7,
+    // last_tick: Instant,
+    // last_bpm: usize,
+    // ticks: usize
 }
 
 impl FinishSettings for ReceiveProgramChanges {
@@ -137,6 +140,22 @@ impl MidiReceiver for ReceiveProgramChanges {
                 (self.mode, self.settings) = Self::select_program(self.msb, self.lsb, self.pc);
                 None
             },
+            //TODO with this test code I was able to get an accurate read up to 200bpm
+            // MidiMessage::TimingClock => {
+            //     self.ticks += 1;
+            //     if self.ticks == 24 {
+            //         self.ticks = 0;
+            //         let now = Instant::now();
+            //         let ns = now.duration_since(self.last_tick).as_nanos();
+            //         self.last_tick = now;
+            //         let bpm = (60000000000.0 / ns as f64).round() as usize;
+            //         if bpm != self.last_bpm {
+            //             self.last_bpm = bpm;
+            //             println!("{}ns = {}bpm", ns, bpm);
+            //         }
+            //     }
+            //     Some(message)
+            // }
             _ => Some(message)
         }
     }
@@ -157,7 +176,10 @@ impl ReceiveProgramChanges {
             lsb,
             pc,
             mode,
-            settings
+            settings,
+            // last_tick: Instant::now(),
+            // last_bpm: 0,
+            // ticks: 0
         }
     }
 
