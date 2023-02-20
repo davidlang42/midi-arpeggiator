@@ -27,7 +27,7 @@ impl<'a> PressHold<'a> {
     }
 }
 
-impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {
+impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {//TODO something happens when changing quickly where it locks out and will no longer arp (only experienced in MutliArp but that may or may not mean anything)
     fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
             //TODO handle pedal up/down
