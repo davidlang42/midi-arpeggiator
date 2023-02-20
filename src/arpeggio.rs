@@ -70,12 +70,6 @@ impl Step {
         }
     }
 
-    pub fn empty() -> Self {
-        Self {
-            notes: Vec::new()
-        }
-    }
-
     pub fn note(note: NoteDetails) -> Self {
         Self {
             notes: vec![note]

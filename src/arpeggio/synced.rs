@@ -35,14 +35,15 @@ impl Arpeggio {
         panic!("Arpeggio did not contain any notes");
     }
 
-    pub fn from(steps: Vec<Step>, finish_steps: bool) -> Self {
+    pub fn from(steps: Vec<Step>, total_beats: usize, finish_steps: bool) -> Self {
         if steps.len() == 0 {
             panic!("Cannot construct an Arpeggio without any steps");
         }
-        let ticks_per_step = if steps.len() >= midi::TICKS_PER_BEAT {
+        let total_ticks = total_beats * midi::TICKS_PER_BEAT;
+        let ticks_per_step = if steps.len() >= total_ticks {
             1
         } else {
-            midi::TICKS_PER_BEAT / steps.len()
+            total_ticks / steps.len()
         };
         Self { steps, ticks_per_step, finish_steps }
     }

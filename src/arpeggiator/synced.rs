@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::mem;
 use std::time::Instant;
-use crate::midi::{self, TICKS_PER_BEAT};
+use crate::midi;
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggio::synced::{Arpeggio, Player};
 use crate::settings::{PatternSettings, FinishSettings};
@@ -46,7 +46,7 @@ impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {
                 if self.held_notes.len() != 0 && self.held_notes.values().map(|(i, _)| i).min().unwrap().elapsed().as_millis() > Self::TRIGGER_TIME_MS {
                     let note_details: Vec<NoteDetails> = self.held_notes.drain().map(|(_, (_, d))| d).collect();
                     let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
-                    let arp = Arpeggio::from_steps(settings.generate_steps(note_details), settings.finish_pattern());
+                    let arp = Arpeggio::from(settings.generate_steps(note_details), 1, settings.finish_pattern());
                     println!("Arp: {}", arp);
                     self.arpeggios.push((note_set, Player::init(arp, &self.midi_out)));
                 }
@@ -120,7 +120,7 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for MutatingHold<'a> {
                             existing.stop();
                         }
                     } else {
-                        let arp = Arpeggio::from_steps(self.held_notes.iter().map(|n| Step::note(*n)).collect(), settings.finish_pattern());
+                        let arp = Arpeggio::from(self.held_notes.iter().map(|n| Step::note(*n)).collect(), 1, settings.finish_pattern());
                         println!("Arp: {}", arp);
                         if let Some(existing) = &mut self.arpeggio {
                             existing.change_arpeggio(arp)?;
@@ -172,7 +172,7 @@ fn drain_and_force_stop_map<N>(arpeggios: &mut HashMap<N, Player>) -> Result<(),
 
 pub struct PedalRecorder<'a> {
     midi_out: &'a midi::OutputDevice,
-    notes: Vec<(usize, NoteDetails)>,
+    notes: Vec<(Instant, NoteDetails)>,
     ticks_since_last_note: usize,
     thru_notes: HashMap<Note, NoteDetails>,
     pedal: bool,
@@ -195,7 +195,7 @@ impl<'a> PedalRecorder<'a> {
 }
 
 impl<'a> PedalRecorder<'a> {
-    const TICKS_THRESHOLD: usize = TICKS_PER_BEAT / 4; // quarter of a beat (ie. semi-quaver)
+    const TRIGGER_TIME_MS: u128 = 50;
 }
 
 impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a> {
@@ -204,10 +204,9 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a> {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 if !self.pedal && u8::from(value) >= 64 {
                     self.pedal = true;
-                    self.ticks_since_last_note = 0;
                     self.recorded = None;
                     for (_, player) in &mut self.arpeggios {
-                        player.stop();
+                        player.stop();//TODO should this maybe force stop on pedal down? (ie. make pedal down a hard off in case of issues)
                     }
                 } else if self.pedal && u8::from(value) < 64 {
                     self.pedal = false;
@@ -217,12 +216,20 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a> {
                     if self.notes.len() > 0 {
                         // save recorded arpeggio
                         let notes = mem::replace(&mut self.notes, Vec::new());
-                        let ticks_into_beat = self.ticks_since_last_note % TICKS_PER_BEAT;
-                        if ticks_into_beat >= Self::TICKS_THRESHOLD {
-                            self.ticks_since_last_note += TICKS_PER_BEAT;
+                        let mut steps = Vec::new();
+                        let mut step_notes = Vec::new();
+                        let mut last_instant = None;
+                        for (instant, note) in notes {
+                            if last_instant.is_some() && instant.duration_since(last_instant.unwrap()).as_millis() > Self::TRIGGER_TIME_MS {
+                                steps.push(Step::notes(step_notes));
+                                step_notes = Vec::new();
+                            }
+                            step_notes.push(note);
+                            last_instant = Some(instant);
                         }
-                        self.ticks_since_last_note -= ticks_into_beat;
-                        self.recorded = Some(Arpeggio::from_notes(notes, self.ticks_since_last_note, settings.finish_pattern()));
+                        steps.push(Step::notes(step_notes));
+                        let total_beats = steps.len();
+                        self.recorded = Some(Arpeggio::from(steps, total_beats, settings.finish_pattern()));
                         // start play in original key
                         let arp = self.recorded.as_ref().unwrap();
                         let original = arp.first_note();
@@ -236,7 +243,7 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a> {
                     self.midi_out.sender.send(received)?;
                     let d = NoteDetails { c, n, v };
                     self.thru_notes.insert(n, d);
-                    self.notes.push((self.ticks_since_last_note, d));
+                    self.notes.push((Instant::now(), d));
                     self.ticks_since_last_note = 0;
                 } else if self.arpeggios.contains_key(&n) {
                     // already playing, do nothing
