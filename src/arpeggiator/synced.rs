@@ -73,6 +73,7 @@ impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {
     }
 }
 
+//TODO maybe add a setting to set number of ticks per step (the point of this is so adding notes doesnt speed up arp but instead its always a fixed speed, you can just add notes to the end of the list)
 pub struct MutatingHold<'a> { //TODO need to make first arp of MutatingHold more reliable, it seems to not play the middle note of 3 if I'm not quite fast enough at the roll on
     midi_out: &'a midi::OutputDevice,
     held_notes: Vec<NoteDetails>,
@@ -180,7 +181,7 @@ pub struct PedalRecorder<'a> {
     recorded: Option<Arpeggio>
 }
 
-impl<'a> PedalRecorder<'a> {
+impl<'a> PedalRecorder<'a> { //TODO maybe make PedalRecorder use a FixedBeats number (eg. 10) -- but what does this achieve?
     pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
             midi_out,
