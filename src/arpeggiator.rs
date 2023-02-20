@@ -12,8 +12,8 @@ pub mod synced;
 
 #[derive(Clone, EnumIter)]
 pub enum Pattern {
-    Down,
-    Up
+    Up,
+    Down
     //TODO more patterns: Random, Out, In
 }
 

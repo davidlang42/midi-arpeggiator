@@ -168,7 +168,7 @@ impl ReceiveProgramChanges {
         // - 64-127 (first bit=1) for Fixed Notes per step (1-63)
         // Program Change represents PatternSettings direction & FinishSettings:
         // - 0-63 (first bit=0) for StopImmediately, Pattern direction (0-63)
-        // - 1-127 (first bit=1) for FinishSteps, Pattern direction (0-63)
+        // - 64-127 (first bit=1) for FinishSteps, Pattern direction (0-63)
         let pc_u8 = u8::from(pc) as usize;
         let (finish, pattern) = if pc_u8 < 64 {
             (StopArpeggio::Immediately, Pattern::iter().nth(pc_u8 % Pattern::iter().len()).unwrap())
