@@ -21,8 +21,8 @@ impl Pattern {
     pub fn of(&self, mut notes: Vec<NoteDetails>, steps: usize) -> Vec<Step> {
         // put the notes in order based on the pattern type
         match self {
-            Pattern::Down => notes.sort_by(|a, b| a.n.cmp(&b.n)),
-            Pattern::Up => notes.sort_by(|a, b| b.n.cmp(&a.n)),
+            Pattern::Up => notes.sort_by(|a, b| a.n.cmp(&b.n)),
+            Pattern::Down => notes.sort_by(|a, b| b.n.cmp(&a.n)),
         }
         // expand notes until there are at least enough notes for 1 note per step
         while notes.len() < steps {
