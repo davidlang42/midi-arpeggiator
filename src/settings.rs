@@ -168,7 +168,7 @@ impl ReceiveProgramChanges {
             (0, 0, 0) => (2, 4, 64),
             (0, 0, 1) => (2, 3, 65),
             (0, 0, 2) => (2, 1, 0),
-            (0, 0, 3) => (4, 0, 0),
+            (0, 0, 3) => (4, 0, 64),
             _ => (0, 0, 0)
         };
         println!("Settings change: MSB {}, LSB {}, PC {}", msb_u8, lsb_u8, pc_u8);//TODO confirm all existing printlns to proper status
