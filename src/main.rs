@@ -2,7 +2,7 @@ use std::env;
 use std::error::Error;
 
 use arpeggiator::MultiArpeggiator;
-use settings::ReceiveProgramChanges;
+use settings::{ReceiveProgramChanges, VariableVelocity};
 
 use crate::settings::{StopArpeggio, FixedNotesPerStep};
 use crate::midi::{InputDevice, OutputDevice};
@@ -35,8 +35,6 @@ const MODES: [&str; 7] = [
 // - first becomes in, second becomes out
 // - to confirm connection, play the 2 notes used as first note ons to the output one after another
 
-//TODO add arp setting for velocity (original or fixed(100?))
-
 //TODO make StatusSignal trait
 // - basic implementation std out, later implement physical LED
 // - indicate beats at tempo, number of steps, direction
@@ -54,37 +52,37 @@ fn main() -> Result<(), Box<dyn Error>> {
             &OutputDevice::open(&midi_out)?
         ).listen(
             InputDevice::open(&midi_in, false)?,
-            StopArpeggio::WhenFinished
+            VariableVelocity(StopArpeggio::WhenFinished)
         ),
         PEDAL => timed::PedalRecorder::new(
             &OutputDevice::open(&midi_out)?,
         ).listen(
             InputDevice::open(&midi_in, false)?,
-            StopArpeggio::Immediately
+            VariableVelocity(StopArpeggio::Immediately)
         ),
         CLOCK => synced::MutatingHold::new(
             &OutputDevice::open(&midi_out)?,
         ).listen(
             InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
-            StopArpeggio::WhenFinished
+            VariableVelocity(StopArpeggio::WhenFinished)
         ),
         CLOCK_DOWN => synced::PressHold::new(
             &OutputDevice::open(&midi_out)?
         ).listen(
             InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
-            FixedNotesPerStep(1, Pattern::Down, StopArpeggio::WhenFinished)
+            FixedNotesPerStep(1, Pattern::Down, None, StopArpeggio::WhenFinished)
         ),
         CLOCK_UP => synced::PressHold::new(
             &OutputDevice::open(&midi_out)?
         ).listen(
             InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
-            FixedNotesPerStep(1, Pattern::Up, StopArpeggio::WhenFinished)
+            FixedNotesPerStep(1, Pattern::Up, None, StopArpeggio::WhenFinished)
         ),
         CLOCK_PEDAL => synced::PedalRecorder::new(
             &OutputDevice::open(&midi_out)?,
         ).listen(
             InputDevice::open_with_external_clock(&midi_in, &midi_clock()?)?,
-            FixedNotesPerStep(1, Pattern::Up, StopArpeggio::WhenFinished)
+            FixedNotesPerStep(1, Pattern::Up, None, StopArpeggio::WhenFinished)
         ),
         MULTI => MultiArpeggiator::new(
             &OutputDevice::open(&midi_out)?,

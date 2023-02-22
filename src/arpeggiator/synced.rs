@@ -6,7 +6,7 @@ use std::time::Instant;
 use crate::midi;
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggio::synced::{Arpeggio, Player};
-use crate::settings::{PatternSettings, FinishSettings};
+use crate::settings::{PatternSettings, VelocitySettings};
 use super::Arpeggiator;
 
 pub struct PressHold<'a> {
@@ -27,7 +27,8 @@ impl<'a> PressHold<'a> {
     }
 }
 
-impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {//TODO (BUG) something happens when changing quickly where it locks out and will no longer arp (only experienced in MutliArp but that may or may not mean anything)
+//TODO (BUG) something happens when changing quickly where it locks out and will no longer arp (only experienced in MutliArp but that may or may not mean anything)
+impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(c, n, v) => {
@@ -72,10 +73,6 @@ impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {//TODO (BUG) some
     }
 }
 
-//TODO maybe add a setting to set number of ticks per step (the point of this is so adding notes doesnt speed up arp but instead its always a fixed speed, you can just add notes to the end of the list)
-// do the existing types of PatternSettings make sense?
-// - fixed notes per step
-// - fixed steps
 pub struct MutatingHold<'a> {
     midi_out: &'a midi::OutputDevice,
     held_notes: Vec<NoteDetails>,
@@ -94,7 +91,7 @@ impl<'a> MutatingHold<'a> {
     }
 }
 
-impl<'a, S: FinishSettings> Arpeggiator<S> for MutatingHold<'a> {
+impl<'a, S: VelocitySettings> Arpeggiator<S> for MutatingHold<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(c, n, v) => {
@@ -122,7 +119,9 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for MutatingHold<'a> {
                             existing.stop();
                         }
                     } else {
-                        let arp = Arpeggio::from(self.held_notes.iter().map(|n| Step::note(*n)).collect(), 1, settings.finish_pattern());
+                        let steps: Vec<Step> = self.held_notes.iter().map(|n| Step::note((*n).change_velocity(settings))).collect();
+                        let steps_len = steps.len();
+                        let arp = Arpeggio::from(steps, steps_len, settings.finish_pattern());
                         println!("Arp: {}", arp);
                         if let Some(existing) = &mut self.arpeggio {
                             existing.change_arpeggio(arp)?;
@@ -200,7 +199,7 @@ impl<'a> PedalRecorder<'a> {
     const TRIGGER_TIME_MS: u128 = 50;
 }
 
-impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a> {
+impl<'a, S: VelocitySettings> Arpeggiator<S> for PedalRecorder<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
@@ -224,7 +223,7 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a> {
                                 steps.push(Step::notes(step_notes));
                                 step_notes = Vec::new();
                             }
-                            step_notes.push(note);
+                            step_notes.push(note.change_velocity(settings));
                             last_instant = Some(instant);
                         }
                         steps.push(Step::notes(step_notes));

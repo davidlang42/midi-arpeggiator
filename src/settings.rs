@@ -14,7 +14,11 @@ pub trait FinishSettings: MidiReceiver {
     fn finish_pattern(&self) -> bool;
 }
 
-pub trait PatternSettings: FinishSettings {
+pub trait VelocitySettings: FinishSettings {
+    fn velocity(&self, recorded_velocity: U7) -> U7;
+}
+
+pub trait PatternSettings: VelocitySettings {
     fn generate_steps(&self, notes: Vec<NoteDetails>) -> Vec<Step>;
 }
 
@@ -39,11 +43,53 @@ impl FinishSettings for StopArpeggio {
 
 impl MidiReceiver for StopArpeggio { }
 
-pub struct FixedSteps(pub usize, pub Pattern, pub StopArpeggio);
+pub struct VariableVelocity(pub StopArpeggio);
+
+impl MidiReceiver for VariableVelocity { }
+
+impl FinishSettings for VariableVelocity {
+    fn finish_pattern(&self) -> bool {
+        self.0.finish_pattern()
+    }
+}
+
+impl VelocitySettings for VariableVelocity {
+    fn velocity(&self, recorded_velocity: U7) -> U7 {
+        recorded_velocity
+    }
+}
+
+pub struct FixedVelocity(U7, StopArpeggio);
+
+impl MidiReceiver for FixedVelocity { }
+
+impl FinishSettings for FixedVelocity {
+    fn finish_pattern(&self) -> bool {
+        self.1.finish_pattern()
+    }
+}
+
+impl VelocitySettings for FixedVelocity {
+    fn velocity(&self, _recorded_velocity: U7) -> U7 {
+        self.0
+    }
+}
+
+pub struct FixedSteps(pub usize, pub Pattern, pub Option<U7>, pub StopArpeggio);
 
 impl FinishSettings for FixedSteps {
     fn finish_pattern(&self) -> bool {
-        self.2.finish_pattern()
+        self.3.finish_pattern()
+    }
+}
+
+impl VelocitySettings for FixedSteps {
+    fn velocity(&self, recorded_velocity: U7) -> U7 {
+        if let Some(fixed) = self.2 {
+            fixed
+        } else {
+            recorded_velocity
+        }
     }
 }
 
@@ -55,11 +101,21 @@ impl PatternSettings for FixedSteps {
 
 impl MidiReceiver for FixedSteps { }
 
-pub struct FixedNotesPerStep(pub usize, pub Pattern, pub StopArpeggio);
+pub struct FixedNotesPerStep(pub usize, pub Pattern, pub Option<U7>, pub StopArpeggio);
 
 impl FinishSettings for FixedNotesPerStep {
     fn finish_pattern(&self) -> bool {
-        self.2.finish_pattern()
+        self.3.finish_pattern()
+    }
+}
+
+impl VelocitySettings for FixedNotesPerStep {
+    fn velocity(&self, recorded_velocity: U7) -> U7 {
+        if let Some(fixed) = self.2 {
+            fixed
+        } else {
+            recorded_velocity
+        }
     }
 }
 
@@ -90,8 +146,6 @@ impl MidiReceiver for FixedNotesPerStep { }
 // ** this determines the number and duration of each step, then when notes are played, they are divided evenly between the steps, with extra notes on earlier steps as required
 // ** this requires reading more note-on from midi_out (which currently just reads clock)
 
-//TODO consider implementing AssignableSwitches setting getter (https://github.com/davidlang42/midi-arpeggiator/issues/4)
-
 pub struct ReceiveProgramChanges {
     mode: ArpeggiatorMode,
     settings: Box<dyn PatternSettings>,
@@ -106,6 +160,12 @@ pub struct ReceiveProgramChanges {
 impl FinishSettings for ReceiveProgramChanges {
     fn finish_pattern(&self) -> bool {
         self.settings.finish_pattern()
+    }
+}
+
+impl VelocitySettings for ReceiveProgramChanges {
+    fn velocity(&self, recorded_velocity: U7) -> U7 {
+        self.settings.velocity(recorded_velocity)
     }
 }
 
@@ -137,24 +197,6 @@ impl MidiReceiver for ReceiveProgramChanges {
                 (self.mode, self.settings) = Self::select_program(self.msb, self.lsb, self.pc);
                 None
             },
-            //TODO implement this as a bpm detector settings (with this test code I was able to get an accurate read up to 200bpm on laptop, but need to confirm on pi0)
-            // FIRST: confirm this is useful for the exact types of arps I want to use, otheriwse make a future issue in GitHub
-            // - (RD300NX live set changes) bpm of clock ticks - measure bpm, even number => up, odd number => down
-            // MidiMessage::TimingClock => {
-            //     self.ticks += 1;
-            //     if self.ticks == 24 {
-            //         self.ticks = 0;
-            //         let now = Instant::now();
-            //         let ns = now.duration_since(self.last_tick).as_nanos();
-            //         self.last_tick = now;
-            //         let bpm = (60000000000.0 / ns as f64).round() as usize;
-            //         if bpm != self.last_bpm {
-            //             self.last_bpm = bpm;
-            //             println!("{}ns = {}bpm", ns, bpm);
-            //         }
-            //     }
-            //     Some(message)
-            // }
             _ => Some(message)
         }
     }
@@ -164,6 +206,8 @@ impl ReceiveProgramChanges {
     const DEFAULT_MSB: u8 = 0;
     const DEFAULT_LSB: u8 = 0;
     const DEFAULT_PC: u8 = 0;
+
+    const FIXED_VELOCITY: Option<U7> = Some(U7::from_u8_lossy(100));
 
     pub fn new() -> Self {
         let msb = U7::from_u8_lossy(Self::DEFAULT_MSB);
@@ -211,10 +255,10 @@ impl ReceiveProgramChanges {
         
         let settings: Box<dyn PatternSettings> = if lsb_u8 < 64 {
             println!("FixedSteps({})", cap_range(lsb_u8, 1, 24));
-            Box::new(FixedSteps(cap_range(lsb_u8, 1, 24), pattern, finish))
+            Box::new(FixedSteps(cap_range(lsb_u8, 1, 24), pattern, Self::FIXED_VELOCITY, finish))
         } else {
             println!("FixedNotesPerSteps({})", cap_range(lsb_u8 - 64, 1, 63));
-            Box::new(FixedNotesPerStep(cap_range(lsb_u8 - 64, 1, 63), pattern, finish))
+            Box::new(FixedNotesPerStep(cap_range(lsb_u8 - 64, 1, 63), pattern, Self::FIXED_VELOCITY, finish))
         };
         let mode = ArpeggiatorMode::iter().nth(msb_u8 % ArpeggiatorMode::iter().len()).unwrap();
         println!("{:?}", mode);

@@ -6,7 +6,7 @@ use wmidi::{Note, MidiMessage, ControlFunction};
 use crate::midi;
 use crate::arpeggio::NoteDetails;
 use crate::arpeggio::timed::{Arpeggio, Player};
-use crate::settings::FinishSettings;
+use crate::settings::VelocitySettings;
 use super::Arpeggiator;
 
 pub struct RepeatRecorder<'a> {
@@ -27,7 +27,7 @@ impl<'a> RepeatRecorder<'a> {
     }
 }
 
-impl<'a, S: FinishSettings> Arpeggiator<S> for RepeatRecorder<'a> {
+impl<'a, S: VelocitySettings> Arpeggiator<S> for RepeatRecorder<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(c, n, v) => {
@@ -37,7 +37,7 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for RepeatRecorder<'a> {
                         let mut notes: Vec<(Instant, NoteDetails)> = self.held_notes.drain().map(|(_, v)| v).collect();
                         notes.push((*first_i, *first));
                         notes.sort_by(|(a, _), (b, _)| a.cmp(&b));
-                        let arp = Arpeggio::from(notes, finish, settings.finish_pattern());
+                        let arp = Arpeggio::from(notes, finish, settings.finish_pattern(), settings);
                         self.arpeggios.insert(n, Player::start(arp, &self.midi_out)?);
                     },
                     _ => {
@@ -91,7 +91,7 @@ impl<'a> PedalRecorder<'a> {
     }
 }
 
-impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a> {
+impl<'a, S: VelocitySettings> Arpeggiator<S> for PedalRecorder<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
@@ -110,7 +110,7 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a> {
                         // save recorded arpeggio
                         let finish = Instant::now();
                         let notes = mem::replace(&mut self.notes, Vec::new());
-                        self.recorded = Some(Arpeggio::from(notes, finish, settings.finish_pattern()));
+                        self.recorded = Some(Arpeggio::from(notes, finish, settings.finish_pattern(), settings));
                         // start play in original key
                         let arp = self.recorded.as_ref().unwrap();
                         let original = arp.first_note();
