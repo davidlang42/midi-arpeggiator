@@ -30,12 +30,12 @@ const MODES: [&str; 7] = [
     MULTI
 ];
 
-//TODO headless auto config
+//TODO (CONFIG) headless auto config
 // - by opening all midi devices for read, waiting for first to send a note on, then second to send a note on
 // - first becomes in, second becomes out
 // - to confirm connection, play the 2 notes used as first note ons to the output one after another
 
-//TODO make StatusSignal trait
+//TODO (STATUS) make StatusSignal trait
 // - basic implementation std out, later implement physical LED
 // - indicate beats at tempo, number of steps, direction
 // - ideally show if an arp is playing/stopping
@@ -92,5 +92,5 @@ fn main() -> Result<(), Box<dyn Error>> {
         ),
         _ => return Err(format!("Invalid arpeggiator mode: {}", mode).into())
     }
-    //TODO make this stop on ESC pressed (or any key?)
+    //TODO (ESC) make this stop on ESC pressed (or any key?)
 }

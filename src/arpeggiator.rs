@@ -72,7 +72,7 @@ pub trait Arpeggiator<S: MidiReceiver> {
             if let Some(pass_through) = settings.passthrough_midi(message) {
                 self.process(pass_through, &settings)?;
             }
-            //TODO handle abort message
+            //TODO (ESC) handle abort message
         }
         Ok(())
     }
@@ -103,7 +103,8 @@ pub struct MultiArpeggiator<'a> {
     midi_out: &'a midi::OutputDevice
 }
 
-impl<'a> MultiArpeggiator<'a> {//TODO can this be a real Arpeggiator?
+//TODO can this be a real Arpeggiator?
+impl<'a> MultiArpeggiator<'a> {
     pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
             midi_out
@@ -124,7 +125,7 @@ impl<'a> MultiArpeggiator<'a> {//TODO can this be a real Arpeggiator?
             if let Some(passed_through) = pass_through {
                 current.process(passed_through, &settings)?;
             }
-            //TODO handle abort message
+            //TODO (ESC) handle abort message
         }
         Ok(())
     }

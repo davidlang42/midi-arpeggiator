@@ -138,7 +138,7 @@ impl PatternSettings for FixedNotesPerStep {
 
 impl MidiReceiver for FixedNotesPerStep { }
 
-//TODO implement rhythm follower settings getter
+//TODO (SETTINGS) implement rhythm follower settings getter
 // FIRST: make sure this provides value for the types of arp I need, if it doesn't turn it into a github issue for future reference
 // ** set keyboard rhythm volume to 0, midi out to ch10, pattern to *something* and turn it on
 // ** handle any note-on for ch10 as triggers for arpeggio steps (rather than clock ticks)
@@ -236,7 +236,8 @@ impl ReceiveProgramChanges {
             (0, 0, 3) => (4, 0, 64),
             _ => (0, 0, 0)
         };
-        println!("Settings change: MSB {}, LSB {}, PC {}", msb_u8, lsb_u8, pc_u8);//TODO convert all existing printlns to proper status
+        //TODO (STATUS) convert all existing printlns to proper status
+        println!("Settings change: MSB {}, LSB {}, PC {}", msb_u8, lsb_u8, pc_u8);
         // Bank Select MSB is used for ModeSettings:
         // - 0-127 = ArpeggiatorMode
         // Bank Select LSB is used for PatternSettings type:
