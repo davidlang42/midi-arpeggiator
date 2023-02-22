@@ -27,10 +27,9 @@ impl<'a> PressHold<'a> {
     }
 }
 
-impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {//TODO something happens when changing quickly where it locks out and will no longer arp (only experienced in MutliArp but that may or may not mean anything)
+impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {//TODO (BUG) something happens when changing quickly where it locks out and will no longer arp (only experienced in MutliArp but that may or may not mean anything)
     fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
-            //TODO handle pedal up/down
             MidiMessage::NoteOn(c, n, v) => {
                 self.held_notes.insert(n, (Instant::now(), NoteDetails { c, n, v }));
             },
@@ -74,7 +73,10 @@ impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {//TODO something 
 }
 
 //TODO maybe add a setting to set number of ticks per step (the point of this is so adding notes doesnt speed up arp but instead its always a fixed speed, you can just add notes to the end of the list)
-pub struct MutatingHold<'a> { //TODO need to make first arp of MutatingHold more reliable, it seems to not play the middle note of 3 if I'm not quite fast enough at the roll on
+// do the existing types of PatternSettings make sense?
+// - fixed notes per step
+// - fixed steps
+pub struct MutatingHold<'a> {
     midi_out: &'a midi::OutputDevice,
     held_notes: Vec<NoteDetails>,
     changed: bool,
@@ -95,7 +97,6 @@ impl<'a> MutatingHold<'a> {
 impl<'a, S: FinishSettings> Arpeggiator<S> for MutatingHold<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
-            //TODO handle pedal up/down
             MidiMessage::NoteOn(c, n, v) => {
                 self.held_notes.push(NoteDetails { c, n, v });
                 self.changed = true;
@@ -181,7 +182,7 @@ pub struct PedalRecorder<'a> {
     recorded: Option<Arpeggio>
 }
 
-impl<'a> PedalRecorder<'a> { //TODO maybe make PedalRecorder use a FixedBeats number (eg. 10) -- but what does this achieve?
+impl<'a> PedalRecorder<'a> {
     pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
             midi_out,
@@ -206,9 +207,7 @@ impl<'a, S: FinishSettings> Arpeggiator<S> for PedalRecorder<'a> {
                 if !self.pedal && u8::from(value) >= 64 {
                     self.pedal = true;
                     self.recorded = None;
-                    for (_, player) in &mut self.arpeggios {
-                        player.stop();//TODO should this maybe force stop on pedal down? (ie. make pedal down a hard off in case of issues)
-                    }
+                    drain_and_force_stop_map(&mut self.arpeggios)?;
                 } else if self.pedal && u8::from(value) < 64 {
                     self.pedal = false;
                     for (_, thru_note) in self.thru_notes.drain() {

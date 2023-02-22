@@ -30,6 +30,19 @@ const MODES: [&str; 7] = [
     MULTI
 ];
 
+//TODO headless auto config
+// - by opening all midi devices for read, waiting for first to send a note on, then second to send a note on
+// - first becomes in, second becomes out
+// - to confirm connection, play the 2 notes used as first note ons to the output one after another
+
+//TODO add arp setting for velocity (original or fixed(100?))
+
+//TODO make StatusSignal trait
+// - basic implementation std out, later implement physical LED
+// - indicate beats at tempo, number of steps, direction
+// - ideally show if an arp is playing/stopping
+// - allow arpeggiators to send a "start beat" signal, which syncs the clock beat to start at the next midi tick (for example PedalRecorder will mark the start of the beat when the pedal is pressed down)
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
     let mode = args.next().ok_or(format!("The first argument should be the arpeggiator mode: {}", MODES.join(", ")))?;

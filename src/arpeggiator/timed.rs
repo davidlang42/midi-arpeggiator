@@ -30,13 +30,10 @@ impl<'a> RepeatRecorder<'a> {
 impl<'a, S: FinishSettings> Arpeggiator<S> for RepeatRecorder<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
         match received {
-            //TODO handle pedal up/down
             MidiMessage::NoteOn(c, n, v) => {
                 match &self.last_note_off {
                     Some((first_i, first)) if first.n == n => {
                         let finish = Instant::now();
-                        //TODO check that there wasn't a long gap between last note off and this note on
-                        //TODO handle multiple notes in one step
                         let mut notes: Vec<(Instant, NoteDetails)> = self.held_notes.drain().map(|(_, v)| v).collect();
                         notes.push((*first_i, *first));
                         notes.sort_by(|(a, _), (b, _)| a.cmp(&b));

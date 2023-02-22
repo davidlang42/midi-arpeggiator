@@ -14,7 +14,6 @@ pub mod synced;
 pub enum Pattern {
     Up,
     Down
-    //TODO more patterns: Random, Out, In
 }
 
 impl Pattern {
@@ -104,7 +103,7 @@ pub struct MultiArpeggiator<'a> {
     midi_out: &'a midi::OutputDevice
 }
 
-impl<'a> MultiArpeggiator<'a> {
+impl<'a> MultiArpeggiator<'a> {//TODO can this be a real Arpeggiator?
     pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
             midi_out

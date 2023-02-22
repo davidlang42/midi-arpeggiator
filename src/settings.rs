@@ -82,18 +82,15 @@ impl PatternSettings for FixedNotesPerStep {
 
 impl MidiReceiver for FixedNotesPerStep { }
 
-//TODO implement methods for receiving settings:
-// - (RD300NX live set changes) bpm of clock ticks - measure bpm, even number => up, odd number => down
-// - (RD300NX live set changes) fc1/fc2 set to zero if enabled on each channel (0,1,2) on patch change
-// ** by enabling/disabling pedal/fc1/fc2/bend/mod functions on a certain layer (on patch change keys sends default value (0/8192) to each of these)
-// ** could use 2 of these (which must NEVER be used, so I guess fc1/fc2 are fairly safe), with 3 layers, thats 6 bits, but one must always be on so it is noticed, so 2^6 - 1 = 63 signals (off + 62 signals)
-// ** 3 output channels x 4 directions x 1-5 steps per beat = 60 combos < 62 signals
-// - (RD300NX live set changes) follow rhythm output (or should this be a RhythmFollower synced arpeggiator?)
+//TODO implement rhythm follower settings getter
+// FIRST: make sure this provides value for the types of arp I need, if it doesn't turn it into a github issue for future reference
 // ** set keyboard rhythm volume to 0, midi out to ch10, pattern to *something* and turn it on
 // ** handle any note-on for ch10 as triggers for arpeggio steps (rather than clock ticks)
 // ** "learn" pattern in first beat (24 ticks) by determining steps based on there being any notes on during a tick (how we do know where the start of the beat is? only matters on non-even rhythms)
 // ** this determines the number and duration of each step, then when notes are played, they are divided evenly between the steps, with extra notes on earlier steps as required
 // ** this requires reading more note-on from midi_out (which currently just reads clock)
+
+//TODO consider implementing AssignableSwitches setting getter (https://github.com/davidlang42/midi-arpeggiator/issues/4)
 
 pub struct ReceiveProgramChanges {
     mode: ArpeggiatorMode,
@@ -140,7 +137,9 @@ impl MidiReceiver for ReceiveProgramChanges {
                 (self.mode, self.settings) = Self::select_program(self.msb, self.lsb, self.pc);
                 None
             },
-            //TODO with this test code I was able to get an accurate read up to 200bpm
+            //TODO implement this as a bpm detector settings (with this test code I was able to get an accurate read up to 200bpm on laptop, but need to confirm on pi0)
+            // FIRST: confirm this is useful for the exact types of arps I want to use, otheriwse make a future issue in GitHub
+            // - (RD300NX live set changes) bpm of clock ticks - measure bpm, even number => up, odd number => down
             // MidiMessage::TimingClock => {
             //     self.ticks += 1;
             //     if self.ticks == 24 {
@@ -185,7 +184,7 @@ impl ReceiveProgramChanges {
 
     fn select_program(msb: U7, lsb: U7, pc: U7) -> (ArpeggiatorMode, Box<dyn PatternSettings>) {
         //let (msb_u8, lsb_u8, pc_u8) = (u8::from(msb) as usize, u8::from(lsb) as usize, u8::from(pc) as usize);
-        //TODO shitty hack for testing
+        //TODO shitty hack for testing - probably load these from a file instead
         let (msb_u8, lsb_u8, pc_u8) = match (u8::from(msb) as usize, u8::from(lsb) as usize, u8::from(pc) as usize) {
             (0, 0, 0) => (2, 4, 64),
             (0, 0, 1) => (2, 3, 65),
@@ -193,7 +192,7 @@ impl ReceiveProgramChanges {
             (0, 0, 3) => (4, 0, 64),
             _ => (0, 0, 0)
         };
-        println!("Settings change: MSB {}, LSB {}, PC {}", msb_u8, lsb_u8, pc_u8);//TODO confirm all existing printlns to proper status
+        println!("Settings change: MSB {}, LSB {}, PC {}", msb_u8, lsb_u8, pc_u8);//TODO convert all existing printlns to proper status
         // Bank Select MSB is used for ModeSettings:
         // - 0-127 = ArpeggiatorMode
         // Bank Select LSB is used for PatternSettings type:
