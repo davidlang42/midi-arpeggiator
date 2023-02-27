@@ -72,7 +72,6 @@ pub trait Arpeggiator<S: MidiReceiver> {
             if let Some(pass_through) = settings.passthrough_midi(message) {
                 self.process(pass_through, &settings)?;
             }
-            //TODO (ESC) handle abort message
         }
         Ok(())
     }
@@ -103,7 +102,6 @@ pub struct MultiArpeggiator<'a> {
     midi_out: &'a midi::OutputDevice
 }
 
-//TODO can this be a real Arpeggiator?
 impl<'a> MultiArpeggiator<'a> {
     pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
@@ -125,7 +123,6 @@ impl<'a> MultiArpeggiator<'a> {
             if let Some(passed_through) = pass_through {
                 current.process(passed_through, &settings)?;
             }
-            //TODO (ESC) handle abort message
         }
         Ok(())
     }

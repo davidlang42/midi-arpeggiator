@@ -92,5 +92,4 @@ fn main() -> Result<(), Box<dyn Error>> {
         ),
         _ => return Err(format!("Invalid arpeggiator mode: {}", mode).into())
     }
-    //TODO (ESC) make this stop on ESC pressed (or any key?)
 }
