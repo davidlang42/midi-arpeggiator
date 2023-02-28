@@ -4,11 +4,11 @@ use std::fs;
 use std::thread;
 use std::io::{Read, Write};
 use std::error::Error;
-use std::thread::JoinHandle;
 use std::time::Duration;
 use wmidi::FromBytesError;
 use wmidi::MidiMessage;
 use wmidi::U7;
+use nonblock::NonBlockingReader;
 
 pub struct InputDevice {
     pub receiver: mpsc::Receiver<MidiMessage<'static>>
@@ -93,44 +93,38 @@ impl ClockDevice {
         let mut clock = Self {
             path: PathBuf::from(midi_clock)
         };
-        let test: JoinHandle<Result<ClockDevice, String>> = thread::spawn(move || {
-            clock.wait_for_tick()?; // confirm that the file opens AND that it the device is sending CLOCK TICKS
-            Ok(clock)
-        });
-        const SLEEP_COUNT: u64 = 100;
-        const SLEEP_MS: u64 = 10;
-        for _ in 0..SLEEP_COUNT {
-            if test.is_finished() {
-                break;
-            }
-            thread::sleep(Duration::from_millis(SLEEP_MS));
-        }
-        if !test.is_finished() {
-            //TODO do we need to terminate the test thread?
-            Err(format!("MIDI CLOCK did not send a clock signal within {}ms (less than {:0.0} bpm): {}", SLEEP_COUNT * SLEEP_MS, 60000.0 / ((TICKS_PER_BEAT as u64 * SLEEP_COUNT * SLEEP_MS) as f64), midi_clock).into())
-        } else {
-            match test.join() {
-                Ok(Ok(clock)) => Ok(clock),
-                Ok(Err(s)) => Err(s.into()),
-                Err(e) => Err(format!("{:?}", e).into())
-            }
-        }
+        clock.wait_for_tick(1000)?;
+        Ok(clock)
     }
 
-    pub fn wait_for_tick(&mut self) -> Result<(), String> {
-        let mut f = fs::File::options().read(true).open(&self.path).map_err(|e| format!("Cannot open MIDI CLOCK '{}': {}", self.path.display(), e))?;
-        let mut buf: [u8; 1] = [0; 1];
-        while f.read_exact(&mut buf).is_ok() {
-            if buf[0] == Self::MIDI_TICK {
-                // tick detected
-                return Ok(());
+    pub fn wait_for_tick(&mut self, timeout_ms: u64) -> Result<(), Box<dyn Error>> {
+        const SLEEP_MS: u64 = 100;
+        let f = fs::File::options().read(true).open(&self.path)
+            .map_err(|e| format!("Cannot open Clock device '{}': {}", self.path.display(), e))?;
+        let mut noblock = NonBlockingReader::from_fd(f)?;
+        let mut elapsed = 0;
+        while !noblock.is_eof() && elapsed < timeout_ms {
+            let mut buf = Vec::new();
+            noblock.read_available(&mut buf)?;
+            for byte in buf {
+                if byte == Self::MIDI_TICK {
+                    // tick detected
+                    return Ok(());
+                }
             }
+            thread::sleep(Duration::from_millis(SLEEP_MS));
+            elapsed += SLEEP_MS;
         }
-        Err(format!("Clock device disconnected: {}", self.path.display()))
+        if noblock.is_eof() {
+            Err(format!("Clock device disconnected: {}", self.path.display()).into())
+        } else {
+            Err(format!("Clock device did not send a clock signal within {}ms: {}", timeout_ms, self.path.display()).into())
+        }
     }
 
     pub fn connect(self, sender: mpsc::Sender<MidiMessage<'static>>) -> Result<(), Box<dyn Error>> {
-        let mut clock = fs::File::options().read(true).open(&self.path).map_err(|e| format!("Cannot open MIDI CLOCK '{}': {}", self.path.display(), e))?;
+        let mut clock = fs::File::options().read(true).open(&self.path)
+            .map_err(|e| format!("Cannot open Clock device '{}': {}", self.path.display(), e))?;
         thread::Builder::new().name(format!("midi-clock")).spawn(move || Self::read_clocks_into_queue(&mut clock, sender))?;
         Ok(())
     }
