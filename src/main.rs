@@ -12,11 +12,6 @@ mod settings;
 
 const DEFAULT_SETTINGS_FILE: &str = "settings.json";
 
-//TODO (CONFIG) headless auto config
-// - by opening all midi devices for read, waiting for first to send a note on, then second to send a note on
-// - first becomes in, second becomes out
-// - to confirm connection, play the 2 notes used as first note ons to the output one after another
-
 //TODO (STATUS) make StatusSignal trait
 // - basic implementation std out, later implement physical LED
 // - indicate beats at tempo, number of steps, direction
