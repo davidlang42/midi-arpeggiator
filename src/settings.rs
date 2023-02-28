@@ -24,6 +24,7 @@ impl Settings {
 
     pub fn generate_steps(&self, notes: Vec<NoteDetails>) -> Vec<Step> {
         //fixed_steps: self.1.of(notes, self.0)
+        //TODO
         todo!();
         //fixed notes per step:
         // let notes_per_step = self.0;
