@@ -1,8 +1,7 @@
 use std::error::Error;
 use std::fs;
 
-use wmidi::{MidiMessage, U7, ControlFunction};
-use strum::IntoEnumIterator;
+use wmidi::{MidiMessage, ControlFunction, U7};
 
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggiator::{Pattern, ArpeggiatorMode};
@@ -12,30 +11,32 @@ pub struct Settings {
     pub finish_pattern: bool,
     pub fixed_velocity: Option<u8>,
     pub mode: ArpeggiatorMode,
-    fixed_steps: Option<u8>,
+    fixed_steps: Option<usize>,
     //TODO fixed steps per beat, fixed_beats?
-    fixed_notes_per_step: Option<u8>,
+    fixed_notes_per_step: Option<usize>,
     pattern: Pattern
 }
 
 impl Settings {
     pub fn generate_steps(&self, notes: Vec<NoteDetails>) -> Vec<Step> {
-        //fixed_steps: self.1.of(notes, self.0)
-        //TODO
-        todo!();
-        //fixed notes per step:
-        // let notes_per_step = self.0;
-        // let mut steps = 0;
-        // let mut notes_remaining = notes.len();
-        // while notes_remaining > 0 {
-        //     steps += 1;
-        //     if notes_remaining <= notes_per_step {
-        //         notes_remaining = 0;
-        //     } else {
-        //         notes_remaining -= notes_per_step;
-        //     }
-        // }
-        // self.1.of(notes, steps)
+        if let Some(steps) = self.fixed_steps {
+            self.pattern.of(notes, steps)
+        } else if let Some(notes_per_step) = self.fixed_notes_per_step {
+            let mut steps = 0;
+            let mut notes_remaining = notes.len();
+            while notes_remaining > 0 {
+                steps += 1;
+                if notes_remaining <= notes_per_step {
+                    notes_remaining = 0;
+                } else {
+                    notes_remaining -= notes_per_step;
+                }
+            }
+            self.pattern.of(notes, steps)
+        } else {
+            let notes_len = notes.len();
+            self.pattern.of(notes, notes_len)
+        }
     }
 
     pub fn load(file: String) -> Result<Vec<Self>, Box<dyn Error>> {
@@ -80,7 +81,7 @@ impl SettingsGetter for PredefinedProgramChanges {
             },
             MidiMessage::ProgramChange(_, pc) => {
                 self.pc = pc.into();
-                self.index = ((self.msb as usize * Self::U7_MAX + self.lsb as usize) * Self::U7_MAX + self.pc as usize) % self.predefined.len();
+                self.index = ((self.msb as usize * u8::from(U7::MAX) as usize + self.lsb as usize) * u8::from(U7::MAX) as usize + self.pc as usize) % self.predefined.len();
                 None
             },
             _ => Some(message)
@@ -93,10 +94,8 @@ impl SettingsGetter for PredefinedProgramChanges {
 }
 
 impl PredefinedProgramChanges {
-    const U7_MAX: usize = 127; //TODO use U7::MAX
-
     pub fn new(predefined: Vec<Settings>) -> Self {
-        if predefined.len() > Self::U7_MAX * Self::U7_MAX * Self::U7_MAX {
+        if predefined.len() > u8::from(U7::MAX) as usize * u8::from(U7::MAX) as usize * u8::from(U7::MAX) as usize {
             panic!("Too many predefined program changes for 3 U7s");
         }
         Self {
@@ -109,7 +108,7 @@ impl PredefinedProgramChanges {
     }
 }
 
-//TODO finish implementing DecodeProgramChanges (if worth it)
+//TODO (IF NEEDED) finish implementing DecodeProgramChanges
 // pub struct DecodeProgramChanges {
 //     current: Settings,
 //     msb: U7,
@@ -186,8 +185,7 @@ impl PredefinedProgramChanges {
 //             (StopArpeggio::WhenFinished, Pattern::iter().nth((pc_u8 - 64) % Pattern::iter().len()).unwrap())
 //         };
 //         println!("{:?}", finish);
-//         println!("{:?}", pattern);
-        
+//         println!("{:?}", pattern);  
 //         let settings: Box<dyn PatternSettings> = if lsb_u8 < 64 {
 //             println!("FixedSteps({})", cap_range(lsb_u8, 1, 24));
 //             Box::new(FixedSteps(cap_range(lsb_u8, 1, 24), pattern, Self::FIXED_VELOCITY, finish))
@@ -201,12 +199,12 @@ impl PredefinedProgramChanges {
 //     }
 // }
 
-fn cap_range(value: usize, min: usize, max: usize) -> usize {
-    if value < min {
-        min
-    } else if value > max {
-        max
-    } else {
-        value
-    }
-}
+// fn cap_range(value: usize, min: usize, max: usize) -> usize {
+//     if value < min {
+//         min
+//     } else if value > max {
+//         max
+//     } else {
+//         value
+//     }
+// }
