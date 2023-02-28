@@ -14,7 +14,7 @@ pub struct InputDevice {
     pub receiver: mpsc::Receiver<MidiMessage<'static>>
 }
 
-struct ClockDevice {
+pub struct ClockDevice {
     path: PathBuf
 }
 
@@ -106,6 +106,7 @@ impl ClockDevice {
             thread::sleep(Duration::from_millis(SLEEP_MS));
         }
         if !test.is_finished() {
+            //TODO do we need to terminate the test thread?
             Err(format!("MIDI CLOCK did not send a clock signal within {}ms (less than {:0.0} bpm): {}", SLEEP_COUNT * SLEEP_MS, 60000.0 / ((TICKS_PER_BEAT as u64 * SLEEP_COUNT * SLEEP_MS) as f64), midi_clock).into())
         } else {
             match test.join() {
