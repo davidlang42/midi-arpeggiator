@@ -16,7 +16,13 @@ pub struct NoteDetails {
 
 impl NoteDetails  {
     pub fn change_velocity(mut self, settings: &Settings) -> Self {
-        self.v = settings.velocity(self.v);
+        if let Some(fixed) = settings.fixed_velocity {
+            self.v = if fixed >= u8::from(Velocity::MAX) {
+                Velocity::MAX
+            } else {
+                fixed.try_into().unwrap()
+            }
+        }
         self
     }
 }

@@ -1,27 +1,24 @@
+use std::error::Error;
+use std::fs;
+
 use wmidi::{MidiMessage, U7, ControlFunction};
 use strum::IntoEnumIterator;
 
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggiator::{Pattern, ArpeggiatorMode};
 
+#[derive(Serialize, Deserialize)]
 pub struct Settings {
     pub finish_pattern: bool,
-    fixed_velocity: Option<U7>, //TODO u8?
+    pub fixed_velocity: Option<u8>,
     pub mode: ArpeggiatorMode,
     fixed_steps: Option<u8>,
     //TODO fixed steps per beat, fixed_beats?
     fixed_notes_per_step: Option<u8>,
+    pattern: Pattern
 }
 
 impl Settings {
-    pub fn velocity(&self, recorded_velocity: U7) -> U7 {
-        if let Some(fixed) = self.fixed_velocity {
-            fixed
-        } else {
-            recorded_velocity
-        }
-    }
-
     pub fn generate_steps(&self, notes: Vec<NoteDetails>) -> Vec<Step> {
         //fixed_steps: self.1.of(notes, self.0)
         //TODO
@@ -39,6 +36,12 @@ impl Settings {
         //     }
         // }
         // self.1.of(notes, steps)
+    }
+
+    pub fn load(file: String) -> Result<Vec<Self>, Box<dyn Error>> {
+        let json = fs::read_to_string(&file).map_err(|e| format!("Cannot read from '{}': {}", file, e))?;
+        let settings: Vec<Settings> = serde_json::from_str(&format!("[{}]", json)).map_err(|e| format!("Cannot parse settigs from '{}': {}", file, e))?;
+        Ok(settings)
     }
 }
 

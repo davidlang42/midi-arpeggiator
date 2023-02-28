@@ -10,6 +10,8 @@ mod arpeggio;
 mod arpeggiator;
 mod settings;
 
+#[macro_use] extern crate serde_derive;
+
 const DEFAULT_SETTINGS_FILE: &str = "settings.json";
 
 //TODO (STATUS) make StatusSignal trait
@@ -20,7 +22,7 @@ const DEFAULT_SETTINGS_FILE: &str = "settings.json";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
-    let predefined = load_settings(args.next().unwrap_or(DEFAULT_SETTINGS_FILE.to_owned()));
+    let predefined = Settings::load(args.next().unwrap_or(DEFAULT_SETTINGS_FILE.to_owned()))?;
     let devices = list_files("/dev", "midi")?;
     match devices.len() {
         0 => Err(format!("No MIDI devices found").into()),
@@ -29,11 +31,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         2 if ClockDevice::init(&devices[1]).is_ok() => run(&devices[0], &devices[1], predefined),
         _ => Err(format!("More than 2 MIDI devices found").into())
     }
-}
-
-fn load_settings(filename: String) -> Vec<Settings> {
-    todo!();
-    //TODO load settings file (Vec<Settings>) and give it to the arpeggiator
 }
 
 fn run(midi_in: &str, midi_out: &str, predefined: Vec<Settings>) -> Result<(), Box<dyn Error>> {

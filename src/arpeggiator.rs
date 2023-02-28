@@ -10,7 +10,7 @@ use crate::settings::{Settings, SettingsGetter};
 pub mod timed;
 pub mod synced;
 
-#[derive(Clone, EnumIter, Debug)]
+#[derive(Clone, EnumIter, Debug, Serialize, Deserialize)]
 pub enum Pattern {
     Up,
     Down
@@ -68,7 +68,7 @@ pub trait Arpeggiator {
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>>;
 }
 
-#[derive(PartialEq, EnumIter, Copy, Clone, Debug)]
+#[derive(PartialEq, EnumIter, Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum ArpeggiatorMode {
     RepeatRecorder,
     TimedPedalRecorder,
