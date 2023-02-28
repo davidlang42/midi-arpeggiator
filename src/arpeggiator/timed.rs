@@ -6,7 +6,7 @@ use wmidi::{Note, MidiMessage, ControlFunction};
 use crate::midi;
 use crate::arpeggio::NoteDetails;
 use crate::arpeggio::timed::{Arpeggio, Player};
-use crate::settings::VelocitySettings;
+use crate::settings::Settings;
 use super::Arpeggiator;
 
 pub struct RepeatRecorder<'a> {
@@ -27,8 +27,8 @@ impl<'a> RepeatRecorder<'a> {
     }
 }
 
-impl<'a, S: VelocitySettings> Arpeggiator<S> for RepeatRecorder<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
+impl<'a> Arpeggiator for RepeatRecorder<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(c, n, v) => {
                 match &self.last_note_off {
@@ -91,8 +91,8 @@ impl<'a> PedalRecorder<'a> {
     }
 }
 
-impl<'a, S: VelocitySettings> Arpeggiator<S> for PedalRecorder<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
+impl<'a> Arpeggiator for PedalRecorder<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 if u8::from(value) >= 64 {

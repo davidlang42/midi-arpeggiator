@@ -2,7 +2,7 @@ use std::sync::mpsc;
 use std::fmt;
 use wmidi::{Note, MidiMessage, Velocity, Channel};
 
-use crate::settings::VelocitySettings;
+use crate::settings::Settings;
 
 pub mod timed;
 pub mod synced;
@@ -15,7 +15,7 @@ pub struct NoteDetails {
 }
 
 impl NoteDetails  {
-    pub fn change_velocity<S: VelocitySettings>(mut self, settings: &S) -> Self {
+    pub fn change_velocity(mut self, settings: &Settings) -> Self {
         self.v = settings.velocity(self.v);
         self
     }

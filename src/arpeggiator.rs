@@ -5,7 +5,7 @@ use strum_macros::EnumIter;
 
 use crate::arpeggio::{NoteDetails, Step};
 use crate::midi;
-use crate::settings::{ModeSettings, MidiReceiver};
+use crate::settings::{Settings, SettingsGetter};
 
 pub mod timed;
 pub mod synced;
@@ -63,18 +63,9 @@ impl Pattern {
     }
 }
 
-pub trait Arpeggiator<S: MidiReceiver> {
-    fn process(&mut self, message: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>>;
+pub trait Arpeggiator {
+    fn process(&mut self, message: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>>;
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>>;
-
-    fn listen(&mut self, midi_in: midi::InputDevice, mut settings: S) -> Result<(), Box<dyn Error>> {
-        for message in &midi_in.receiver {
-            if let Some(pass_through) = settings.passthrough_midi(message) {
-                self.process(pass_through, &settings)?;
-            }
-        }
-        Ok(())
-    }
 }
 
 #[derive(PartialEq, EnumIter, Copy, Clone, Debug)]
@@ -87,7 +78,7 @@ pub enum ArpeggiatorMode {
 }
 
 impl ArpeggiatorMode {
-    fn create<'a, S: ModeSettings>(&self, midi_out: &'a midi::OutputDevice) -> Box<dyn Arpeggiator<S> + 'a> {
+    fn create<'a>(&self, midi_out: &'a midi::OutputDevice) -> Box<dyn Arpeggiator + 'a> {
         match self {
             Self::MutatingHold => Box::new(synced::MutatingHold::new(midi_out)),
             Self::PressHold => Box::new(synced::PressHold::new(midi_out)),
@@ -109,19 +100,19 @@ impl<'a> MultiArpeggiator<'a> {
         }
     }
 
-    pub fn listen<S: ModeSettings>(self, midi_in: midi::InputDevice, mut settings: S) -> Result<(), Box<dyn Error>> {
-        let mut mode = settings.get_mode();
+    pub fn listen<S: SettingsGetter>(self, midi_in: midi::InputDevice, mut settings: S) -> Result<(), Box<dyn Error>> {
+        let mut mode = settings.get().mode;
         let mut current: Box<dyn Arpeggiator<S>> = mode.create(self.midi_out);
         for message in &midi_in.receiver {
             let pass_through = settings.passthrough_midi(message);
-            let new_mode = settings.get_mode();
+            let new_mode = settings.get().mode;
             if new_mode != mode {
                 mode = new_mode;
                 current.stop_arpeggios()?;
                 current = new_mode.create(self.midi_out);
             }
             if let Some(passed_through) = pass_through {
-                current.process(passed_through, &settings)?;
+                current.process(passed_through, settings.get())?;
             }
         }
         Ok(())

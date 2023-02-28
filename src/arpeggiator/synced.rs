@@ -6,7 +6,7 @@ use std::time::Instant;
 use crate::midi;
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggio::synced::{Arpeggio, Player};
-use crate::settings::{PatternSettings, VelocitySettings};
+use crate::settings::Settings;
 use super::Arpeggiator;
 
 pub struct PressHold<'a> {
@@ -28,8 +28,8 @@ impl<'a> PressHold<'a> {
 }
 
 //TODO (BUG) something happens when changing quickly where it locks out and will no longer arp (only experienced in MutliArp but that may or may not mean anything)
-impl<'a, S: PatternSettings> Arpeggiator<S> for PressHold<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
+impl<'a> Arpeggiator for PressHold<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(c, n, v) => {
                 self.held_notes.insert(n, (Instant::now(), NoteDetails { c, n, v }));
@@ -91,8 +91,8 @@ impl<'a> MutatingHold<'a> {
     }
 }
 
-impl<'a, S: VelocitySettings> Arpeggiator<S> for MutatingHold<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
+impl<'a> Arpeggiator for MutatingHold<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(c, n, v) => {
                 self.held_notes.push(NoteDetails { c, n, v });
@@ -199,8 +199,8 @@ impl<'a> PedalRecorder<'a> {
     const TRIGGER_TIME_MS: u128 = 50;
 }
 
-impl<'a, S: VelocitySettings> Arpeggiator<S> for PedalRecorder<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &S) -> Result<(), Box<dyn Error>> {
+impl<'a> Arpeggiator for PedalRecorder<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 if !self.pedal && u8::from(value) >= 64 {

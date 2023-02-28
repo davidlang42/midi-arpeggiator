@@ -2,7 +2,7 @@ use std::{env, fs};
 use std::error::Error;
 
 use arpeggiator::MultiArpeggiator;
-use settings::ReceiveProgramChanges;
+use settings::{PredefinedProgramChanges, Settings};
 use midi::{InputDevice, OutputDevice, ClockDevice};
 
 mod midi;
@@ -20,25 +20,29 @@ const DEFAULT_SETTINGS_FILE: &str = "settings.json";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
-    let _settings = args.next().unwrap_or(DEFAULT_SETTINGS_FILE.to_owned());
-    //TODO load settings file (Vec<Settings>) and give it to the arpeggiator
+    let predefined = load_settings(args.next().unwrap_or(DEFAULT_SETTINGS_FILE.to_owned()));
     let devices = list_files("/dev", "midi")?;
     match devices.len() {
         0 => Err(format!("No MIDI devices found").into()),
-        1 => run(&devices[0], &devices[0]),
-        2 if ClockDevice::init(&devices[0]).is_ok() => run(&devices[1], &devices[0]),
-        2 if ClockDevice::init(&devices[1]).is_ok() => run(&devices[0], &devices[1]),
+        1 => run(&devices[0], &devices[0], predefined),
+        2 if ClockDevice::init(&devices[0]).is_ok() => run(&devices[1], &devices[0], predefined),
+        2 if ClockDevice::init(&devices[1]).is_ok() => run(&devices[0], &devices[1], predefined),
         _ => Err(format!("More than 2 MIDI devices found").into())
     }
 }
 
-fn run(midi_in: &str, midi_out: &str) -> Result<(), Box<dyn Error>> {
+fn load_settings(filename: String) -> Vec<Settings> {
+    todo!();
+    //TODO load settings file (Vec<Settings>) and give it to the arpeggiator
+}
+
+fn run(midi_in: &str, midi_out: &str, predefined: Vec<Settings>) -> Result<(), Box<dyn Error>> {
     println!("Starting arpeggiator with MIDI-IN: {}, MIDI-OUT: {}", midi_in, midi_out);
     MultiArpeggiator::new(
         &OutputDevice::open(&midi_out)?,
     ).listen(
         InputDevice::open_with_external_clock(&midi_in, &midi_out)?,
-        ReceiveProgramChanges::new()
+        PredefinedProgramChanges::init(predefined)
     )
 }
 
