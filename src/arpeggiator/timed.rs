@@ -37,7 +37,7 @@ impl<'a> Arpeggiator for RepeatRecorder<'a> {
                         let mut notes: Vec<(Instant, NoteDetails)> = self.held_notes.drain().map(|(_, v)| v).collect();
                         notes.push((*first_i, *first));
                         notes.sort_by(|(a, _), (b, _)| a.cmp(&b));
-                        let arp = Arpeggio::from(notes, finish, settings.finish_pattern(), settings);
+                        let arp = Arpeggio::from(notes, finish, settings.finish_pattern, settings);
                         self.arpeggios.insert(n, Player::start(arp, &self.midi_out)?);
                     },
                     _ => {
@@ -110,7 +110,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                         // save recorded arpeggio
                         let finish = Instant::now();
                         let notes = mem::replace(&mut self.notes, Vec::new());
-                        self.recorded = Some(Arpeggio::from(notes, finish, settings.finish_pattern(), settings));
+                        self.recorded = Some(Arpeggio::from(notes, finish, settings.finish_pattern, settings));
                         // start play in original key
                         let arp = self.recorded.as_ref().unwrap();
                         let original = arp.first_note();

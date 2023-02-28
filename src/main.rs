@@ -42,7 +42,7 @@ fn run(midi_in: &str, midi_out: &str, predefined: Vec<Settings>) -> Result<(), B
         &OutputDevice::open(&midi_out)?,
     ).listen(
         InputDevice::open_with_external_clock(&midi_in, &midi_out)?,
-        PredefinedProgramChanges::init(predefined)
+        PredefinedProgramChanges::new(predefined)
     )
 }
 

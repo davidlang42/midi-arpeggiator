@@ -5,7 +5,7 @@ use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggiator::{Pattern, ArpeggiatorMode};
 
 pub struct Settings {
-    finish_pattern: bool,
+    pub finish_pattern: bool,
     fixed_velocity: Option<U7>, //TODO u8?
     pub mode: ArpeggiatorMode,
     fixed_steps: Option<u8>,
@@ -15,7 +15,7 @@ pub struct Settings {
 
 impl Settings {
     pub fn velocity(&self, recorded_velocity: U7) -> U7 {
-        if let Some(fixed) = self.fixed_velovity {
+        if let Some(fixed) = self.fixed_velocity {
             fixed
         } else {
             recorded_velocity
@@ -57,9 +57,9 @@ pub trait SettingsGetter {
 pub struct PredefinedProgramChanges {
     predefined: Vec<Settings>,
     index: usize,
-    msb: U7,
-    lsb: U7,
-    pc: U7
+    msb: u8,
+    lsb: u8,
+    pc: u8
 }
 
 
@@ -67,16 +67,16 @@ impl SettingsGetter for PredefinedProgramChanges {
     fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
         match message {
             MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT, msb) => {
-                self.msb = msb;
+                self.msb = msb.into();
                 None
             },
             MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT_LSB, lsb) => {
-                self.lsb = lsb;
+                self.lsb = lsb.into();
                 None
             },
             MidiMessage::ProgramChange(_, pc) => {
-                self.pc = pc;
-                self.index = ((self.msb * U7::MAX + self.lsb) * U7::MAX + self.pc).into() % self.predefined.len();
+                self.pc = pc.into();
+                self.index = ((self.msb as usize * Self::U7_MAX + self.lsb as usize) * Self::U7_MAX + self.pc as usize) % self.predefined.len();
                 None
             },
             _ => Some(message)
@@ -89,8 +89,10 @@ impl SettingsGetter for PredefinedProgramChanges {
 }
 
 impl PredefinedProgramChanges {
+    const U7_MAX: usize = 127; //TODO use U7::MAX
+
     pub fn new(predefined: Vec<Settings>) -> Self {
-        if predefined.len() > U7::MAX * U7::MAX * U7::MAX {
+        if predefined.len() > Self::U7_MAX * Self::U7_MAX * Self::U7_MAX {
             panic!("Too many predefined program changes for 3 U7s");
         }
         Self {

@@ -46,7 +46,7 @@ impl<'a> Arpeggiator for PressHold<'a> {
                 if self.held_notes.len() != 0 && self.held_notes.values().map(|(i, _)| i).min().unwrap().elapsed().as_millis() > Self::TRIGGER_TIME_MS {
                     let note_details: Vec<NoteDetails> = self.held_notes.drain().map(|(_, (_, d))| d).collect();
                     let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
-                    let arp = Arpeggio::from(settings.generate_steps(note_details), 1, settings.finish_pattern());
+                    let arp = Arpeggio::from(settings.generate_steps(note_details), 1, settings.finish_pattern);
                     println!("Arp: {}", arp);
                     self.arpeggios.push((note_set, Player::init(arp, &self.midi_out)));
                 }
@@ -121,7 +121,7 @@ impl<'a> Arpeggiator for MutatingHold<'a> {
                     } else {
                         let steps: Vec<Step> = self.held_notes.iter().map(|n| Step::note((*n).change_velocity(settings))).collect();
                         let steps_len = steps.len();
-                        let arp = Arpeggio::from(steps, steps_len, settings.finish_pattern());
+                        let arp = Arpeggio::from(steps, steps_len, settings.finish_pattern);
                         println!("Arp: {}", arp);
                         if let Some(existing) = &mut self.arpeggio {
                             existing.change_arpeggio(arp)?;
@@ -228,7 +228,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                         }
                         steps.push(Step::notes(step_notes));
                         let total_beats = steps.len();
-                        self.recorded = Some(Arpeggio::from(steps, total_beats, settings.finish_pattern()));
+                        self.recorded = Some(Arpeggio::from(steps, total_beats, settings.finish_pattern));
                         // start play in original key
                         let arp = self.recorded.as_ref().unwrap();
                         let original = arp.first_note();

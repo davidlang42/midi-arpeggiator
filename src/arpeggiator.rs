@@ -102,7 +102,7 @@ impl<'a> MultiArpeggiator<'a> {
 
     pub fn listen<S: SettingsGetter>(self, midi_in: midi::InputDevice, mut settings: S) -> Result<(), Box<dyn Error>> {
         let mut mode = settings.get().mode;
-        let mut current: Box<dyn Arpeggiator<S>> = mode.create(self.midi_out);
+        let mut current: Box<dyn Arpeggiator> = mode.create(self.midi_out);
         for message in &midi_in.receiver {
             let pass_through = settings.passthrough_midi(message);
             let new_mode = settings.get().mode;
