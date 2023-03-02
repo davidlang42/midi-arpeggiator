@@ -7,6 +7,7 @@ use crate::midi;
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggio::synced::{Arpeggio, Player};
 use crate::settings::Settings;
+use crate::status::StatusSignal;
 use super::Arpeggiator;
 
 pub struct PressHold<'a> {
@@ -29,7 +30,7 @@ impl<'a> PressHold<'a> {
 
 //TODO (BUG) something happens when changing quickly where it locks out and will no longer arp (only experienced in MutliArp but that may or may not mean anything)
 impl<'a> Arpeggiator for PressHold<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(c, n, v) => {
                 self.held_notes.insert(n, (Instant::now(), NoteDetails { c, n, v }));
@@ -48,6 +49,7 @@ impl<'a> Arpeggiator for PressHold<'a> {
                     let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
                     let arp = Arpeggio::from(settings.generate_steps(note_details), 1, settings.finish_pattern);
                     self.arpeggios.push((note_set, Player::init(arp, &self.midi_out)));
+                    status.reset_beat();
                 }
                 let mut i = 0;
                 while i < self.arpeggios.len() {
@@ -95,7 +97,7 @@ impl<'a> MutatingHold<'a> {
 }
 
 impl<'a> Arpeggiator for MutatingHold<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(c, n, v) => {
                 self.held_notes.push(NoteDetails { c, n, v });
@@ -129,6 +131,7 @@ impl<'a> Arpeggiator for MutatingHold<'a> {
                             existing.change_arpeggio(arp)?;
                         } else {
                             self.arpeggio = Some(Player::init(arp, &self.midi_out));
+                            status.reset_beat();
                         }
                     }
                 }
@@ -210,11 +213,12 @@ impl<'a> PedalRecorder<'a> {
 }
 
 impl<'a> Arpeggiator for PedalRecorder<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 if !self.pedal && u8::from(value) >= 64 {
                     self.pedal = true;
+                    status.reset_beat();
                     self.recorded = None;
                     drain_and_force_stop_map(&mut self.arpeggios)?;
                 } else if self.pedal && u8::from(value) < 64 {
@@ -244,6 +248,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                         let original = arp.first_note();
                         let new_arp = arp.transpose(original, original);
                         self.arpeggios.insert(original, Player::init(new_arp, &self.midi_out));
+                        status.reset_beat();
                     }
                 }
             },
@@ -260,6 +265,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                     let original = arp.first_note();
                     let new_arp = arp.transpose(original, n);
                     self.arpeggios.insert(n, Player::init(new_arp, &self.midi_out));
+                    status.reset_beat();
                 }
             },
             MidiMessage::NoteOff(_, n, _) => {

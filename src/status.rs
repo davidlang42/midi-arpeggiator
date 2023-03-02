@@ -3,8 +3,6 @@ use std::io::Write;
 use crate::settings::Settings;
 use crate::midi::MidiReceiver;
 
-//TODO (STATUS) call reset_beat() in PedalRecorder when the pedal is pressed down
-
 pub trait StatusSignal: MidiReceiver {
     fn update_settings(&mut self, settings: &Settings);
     fn update_count(&mut self, arpeggios: usize);

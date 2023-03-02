@@ -3,6 +3,7 @@ use std::error::Error;
 use std::mem;
 use std::time::Instant;
 use wmidi::{Note, MidiMessage, ControlFunction};
+use crate::status::StatusSignal;
 use crate::midi;
 use crate::arpeggio::NoteDetails;
 use crate::arpeggio::timed::{Arpeggio, Player};
@@ -28,7 +29,7 @@ impl<'a> RepeatRecorder<'a> {
 }
 
 impl<'a> Arpeggiator for RepeatRecorder<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(c, n, v) => {
                 match &self.last_note_off {
@@ -39,6 +40,7 @@ impl<'a> Arpeggiator for RepeatRecorder<'a> {
                         notes.sort_by(|(a, _), (b, _)| a.cmp(&b));
                         let arp = Arpeggio::from(notes, finish, settings.finish_pattern, settings);
                         self.arpeggios.insert(n, Player::start(arp, &self.midi_out)?);
+                        status.reset_beat();
                     },
                     _ => {
                         self.held_notes.insert(n, (Instant::now(), NoteDetails { c, n, v }));
@@ -96,11 +98,12 @@ impl<'a> PedalRecorder<'a> {
 }
 
 impl<'a> Arpeggiator for PedalRecorder<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 if u8::from(value) >= 64 {
                     self.pedal = true;
+                    status.reset_beat();
                     self.recorded = None;
                     drain_and_stop(&mut self.arpeggios);
                 } else {
@@ -120,6 +123,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                         let original = arp.first_note();
                         let new_arp = arp.transpose(original, original);
                         self.arpeggios.insert(original, Player::start(new_arp, &self.midi_out)?);
+                        status.reset_beat();
                     }
                 }
             },
@@ -137,6 +141,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                     let original = arp.first_note();
                     let new_arp = arp.transpose(original, n);
                     self.arpeggios.insert(n, Player::start(new_arp, &self.midi_out)?);
+                    status.reset_beat();
                 }
             },
             MidiMessage::NoteOff(_, n, _) => {

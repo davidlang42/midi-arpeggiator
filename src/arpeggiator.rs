@@ -65,7 +65,7 @@ impl Pattern {
 }
 
 pub trait Arpeggiator {
-    fn process(&mut self, message: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>>;
+    fn process(&mut self, message: MidiMessage<'static>, settings: &Settings, signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>>;
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>>;
     fn count_arpeggios(&self) -> usize;
 }
@@ -117,7 +117,7 @@ impl<'a, SS: StatusSignal> MultiArpeggiator<'a, SS> {
                 current = new_mode.create(self.midi_out);
             }
             if let Some(passed_through) = pass_through {
-                current.process(passed_through, settings.get())?;
+                current.process(passed_through, settings.get(), &mut self.status)?;
                 self.status.update_count(current.count_arpeggios());
             }
         }
