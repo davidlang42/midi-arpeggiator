@@ -5,6 +5,7 @@ use wmidi::{MidiMessage, ControlFunction, U7};
 
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggiator::{Pattern, ArpeggiatorMode};
+use crate::midi::MidiReceiver;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Settings {
@@ -54,8 +55,7 @@ impl Settings {
 // ** this determines the number and duration of each step, then when notes are played, they are divided evenly between the steps, with extra notes on earlier steps as required
 // ** this requires reading more note-on from midi_out (which currently just reads clock)
 
-pub trait SettingsGetter {
-    fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>>;
+pub trait SettingsGetter: MidiReceiver {
     fn get(&self) -> &Settings;
 }
 
@@ -67,8 +67,7 @@ pub struct PredefinedProgramChanges {
     pc: u8
 }
 
-
-impl SettingsGetter for PredefinedProgramChanges {
+impl MidiReceiver for PredefinedProgramChanges {
     fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
         match message {
             MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT, msb) => {
@@ -87,7 +86,9 @@ impl SettingsGetter for PredefinedProgramChanges {
             _ => Some(message)
         }
     }
+}
 
+impl SettingsGetter for PredefinedProgramChanges {
     fn get(&self) -> &Settings {
         &self.predefined[self.index]
     }

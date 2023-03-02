@@ -10,6 +10,12 @@ use wmidi::MidiMessage;
 use wmidi::U7;
 use nonblock::NonBlockingReader;
 
+pub trait MidiReceiver {
+    fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
+        Some(message)
+    }
+}
+
 pub struct InputDevice {
     pub receiver: mpsc::Receiver<MidiMessage<'static>>
 }
