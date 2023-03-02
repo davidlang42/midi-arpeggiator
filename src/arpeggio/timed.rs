@@ -33,7 +33,6 @@ impl fmt::Display for Arpeggio {
 impl Arpeggio {
     fn play(&self, midi_out: mpsc::Sender<MidiMessage<'static>>, should_stop: Arc<AtomicBool>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         let mut i = 0;
-        println!("Playing: {}", self);
         while !should_stop.load(Ordering::Relaxed) || (self.finish_steps && i != 0) {
             let step = &self.steps[i].1;
             step.send_on(&midi_out)?;
@@ -45,7 +44,6 @@ impl Arpeggio {
             thread::sleep(self.steps[i].0);
             step.send_off(&midi_out)?;
         }
-        println!("Stopped: {}", self);
         Ok(())
     }
     

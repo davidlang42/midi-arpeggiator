@@ -4,13 +4,14 @@ use wmidi::MidiMessage;
 use strum_macros::EnumIter;
 
 use crate::arpeggio::{NoteDetails, Step};
+use crate::status::StatusSignal;
 use crate::midi;
 use crate::settings::{Settings, SettingsGetter};
 
 pub mod timed;
 pub mod synced;
 
-#[derive(Clone, EnumIter, Debug, Serialize, Deserialize)]
+#[derive(Clone, EnumIter, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Pattern {
     Up,
     Down
@@ -66,6 +67,7 @@ impl Pattern {
 pub trait Arpeggiator {
     fn process(&mut self, message: MidiMessage<'static>, settings: &Settings) -> Result<(), Box<dyn Error>>;
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>>;
+    fn count_arpeggios(&self) -> usize;
 }
 
 #[derive(PartialEq, EnumIter, Copy, Clone, Debug, Serialize, Deserialize)]
@@ -89,22 +91,25 @@ impl ArpeggiatorMode {
     }
 }
 
-pub struct MultiArpeggiator<'a> {
-    midi_out: &'a midi::OutputDevice
+pub struct MultiArpeggiator<'a, SS: StatusSignal> {
+    midi_out: &'a midi::OutputDevice,
+    status: SS
 }
 
-impl<'a> MultiArpeggiator<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
+impl<'a, SS: StatusSignal> MultiArpeggiator<'a, SS> {
+    pub fn new(midi_out: &'a midi::OutputDevice, status: SS) -> Self {
         Self {
-            midi_out
+            midi_out,
+            status
         }
     }
 
-    pub fn listen<S: SettingsGetter>(self, midi_in: midi::InputDevice, mut settings: S) -> Result<(), Box<dyn Error>> {
+    pub fn listen<SG: SettingsGetter>(mut self, midi_in: midi::InputDevice, mut settings: SG) -> Result<(), Box<dyn Error>> {
         let mut mode = settings.get().mode;
         let mut current: Box<dyn Arpeggiator> = mode.create(self.midi_out);
         for message in &midi_in.receiver {
             let pass_through = settings.passthrough_midi(message);
+            self.status.update_settings(settings.get());
             let new_mode = settings.get().mode;
             if new_mode != mode {
                 mode = new_mode;
@@ -113,6 +118,7 @@ impl<'a> MultiArpeggiator<'a> {
             }
             if let Some(passed_through) = pass_through {
                 current.process(passed_through, settings.get())?;
+                self.status.update_count(current.count_arpeggios());
             }
         }
         Ok(())

@@ -1,24 +1,20 @@
-use std::{env, fs};
+use std::{env, fs, io};
 use std::error::Error;
 
 use arpeggiator::MultiArpeggiator;
 use settings::{PredefinedProgramChanges, Settings};
 use midi::{InputDevice, OutputDevice, ClockDevice};
+use status::TextStatus;
 
 mod midi;
 mod arpeggio;
 mod arpeggiator;
 mod settings;
+mod status;
 
 #[macro_use] extern crate serde_derive;
 
 const DEFAULT_SETTINGS_FILE: &str = "settings.json";
-
-//TODO (STATUS) make StatusSignal trait
-// - basic implementation std out, later implement physical LED
-// - indicate beats at tempo, number of steps, direction
-// - ideally show if an arp is playing/stopping
-// - allow arpeggiators to send a "start beat" signal, which syncs the clock beat to start at the next midi tick (for example PedalRecorder will mark the start of the beat when the pedal is pressed down)
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
@@ -37,6 +33,7 @@ fn run(midi_in: &str, midi_out: &str, predefined: Vec<Settings>) -> Result<(), B
     println!("Starting arpeggiator with MIDI-IN: {}, MIDI-OUT: {}", midi_in, midi_out);
     MultiArpeggiator::new(
         &OutputDevice::open(&midi_out)?,
+        TextStatus::new(io::stdout())
     ).listen(
         InputDevice::open_with_external_clock(&midi_in, &midi_out)?,
         PredefinedProgramChanges::new(predefined)

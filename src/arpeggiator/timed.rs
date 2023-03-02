@@ -67,6 +67,10 @@ impl<'a> Arpeggiator for RepeatRecorder<'a> {
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
         drain_and_wait_for_stop(&mut self.arpeggios)
     }
+
+    fn count_arpeggios(&self) -> usize {
+        self.arpeggios.len()
+    }
 }
 
 pub struct PedalRecorder<'a> {
@@ -157,6 +161,10 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
 
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
         drain_and_wait_for_stop(&mut self.arpeggios)
+    }
+
+    fn count_arpeggios(&self) -> usize {
+        self.arpeggios.len()
     }
 }
 

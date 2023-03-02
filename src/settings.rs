@@ -6,13 +6,13 @@ use wmidi::{MidiMessage, ControlFunction, U7};
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggiator::{Pattern, ArpeggiatorMode};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Settings {
     pub finish_pattern: bool,
     pub fixed_velocity: Option<u8>,
     pub mode: ArpeggiatorMode,
     fixed_steps: Option<usize>,
-    //TODO fixed steps per beat, fixed_beats?
+    //TODO (SETTINGS) fixed steps per beat, fixed_beats?
     fixed_notes_per_step: Option<usize>,
     pattern: Pattern
 }
@@ -107,104 +107,3 @@ impl PredefinedProgramChanges {
         }
     }
 }
-
-//TODO (IF NEEDED) finish implementing DecodeProgramChanges
-// pub struct DecodeProgramChanges {
-//     current: Settings,
-//     msb: U7,
-//     lsb: U7,
-//     pc: U7,
-// }
-
-// impl SettingsGetter for DecodeProgramChanges {
-//     fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
-//         match message {
-//             MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT, msb) => {
-//                 self.msb = msb;
-//                 None
-//             },
-//             MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT_LSB, lsb) => {
-//                 self.lsb = lsb;
-//                 None
-//             },
-//             MidiMessage::ProgramChange(_, pc) => {
-//                 self.pc = pc;
-//                 self.current = Self::select_program(self.msb, self.lsb, self.pc);
-//                 None
-//             },
-//             _ => Some(message)
-//         }
-//     }
-
-//     fn get(&self) -> &Settings {
-//         &self.current
-//     }
-// }
-
-// impl DecodeProgramChanges {
-//     const DEFAULT_MSB: u8 = 0;
-//     const DEFAULT_LSB: u8 = 0;
-//     const DEFAULT_PC: u8 = 0;
-
-//     pub fn new() -> Self {
-//         let msb = U7::from_u8_lossy(Self::DEFAULT_MSB);
-//         let lsb = U7::from_u8_lossy(Self::DEFAULT_LSB);
-//         let pc = U7::from_u8_lossy(Self::DEFAULT_PC);
-//         let current = Self::select_program(msb, lsb, pc);
-//         Self {
-//             msb,
-//             lsb,
-//             pc,
-//             current
-//         }
-//     }
-
-//     fn select_program(msb: U7, lsb: U7, pc: U7) -> Settings {
-//         //let (msb_u8, lsb_u8, pc_u8) = (u8::from(msb) as usize, u8::from(lsb) as usize, u8::from(pc) as usize);
-//         //TODO shitty hack for testing - probably load these from a file instead
-//         let (msb_u8, lsb_u8, pc_u8) = match (u8::from(msb) as usize, u8::from(lsb) as usize, u8::from(pc) as usize) {
-//             (0, 0, 0) => (2, 4, 64),
-//             (0, 0, 1) => (2, 3, 65),
-//             (0, 0, 2) => (2, 1, 0),
-//             (0, 0, 3) => (4, 0, 64),
-//             _ => (0, 0, 0)
-//         };
-//         //TODO (STATUS) convert all existing printlns to proper status
-//         println!("Settings change: MSB {}, LSB {}, PC {}", msb_u8, lsb_u8, pc_u8);
-//         // Bank Select MSB is used for ModeSettings:
-//         // - 0-127 = ArpeggiatorMode
-//         // Bank Select LSB is used for PatternSettings type:
-//         // - 0-63 (first bit=0) for Fixed Steps (1-24)
-//         // - 64-127 (first bit=1) for Fixed Notes per step (1-63)
-//         // Program Change represents PatternSettings direction & FinishSettings:
-//         // - 0-63 (first bit=0) for StopImmediately, Pattern direction (0-63)
-//         // - 64-127 (first bit=1) for FinishSteps, Pattern direction (0-63)
-//         let (finish, pattern) = if pc_u8 < 64 {
-//             (StopArpeggio::Immediately, Pattern::iter().nth(pc_u8 % Pattern::iter().len()).unwrap())
-//         } else {
-//             (StopArpeggio::WhenFinished, Pattern::iter().nth((pc_u8 - 64) % Pattern::iter().len()).unwrap())
-//         };
-//         println!("{:?}", finish);
-//         println!("{:?}", pattern);  
-//         let settings: Box<dyn PatternSettings> = if lsb_u8 < 64 {
-//             println!("FixedSteps({})", cap_range(lsb_u8, 1, 24));
-//             Box::new(FixedSteps(cap_range(lsb_u8, 1, 24), pattern, Self::FIXED_VELOCITY, finish))
-//         } else {
-//             println!("FixedNotesPerSteps({})", cap_range(lsb_u8 - 64, 1, 63));
-//             Box::new(FixedNotesPerStep(cap_range(lsb_u8 - 64, 1, 63), pattern, Self::FIXED_VELOCITY, finish))
-//         };
-//         let mode = ArpeggiatorMode::iter().nth(msb_u8 % ArpeggiatorMode::iter().len()).unwrap();
-//         println!("{:?}", mode);
-//         (mode, settings)
-//     }
-// }
-
-// fn cap_range(value: usize, min: usize, max: usize) -> usize {
-//     if value < min {
-//         min
-//     } else if value > max {
-//         max
-//     } else {
-//         value
-//     }
-// }

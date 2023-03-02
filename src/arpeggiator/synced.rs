@@ -47,7 +47,6 @@ impl<'a> Arpeggiator for PressHold<'a> {
                     let note_details: Vec<NoteDetails> = self.held_notes.drain().map(|(_, (_, d))| d).collect();
                     let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
                     let arp = Arpeggio::from(settings.generate_steps(note_details), 1, settings.finish_pattern);
-                    println!("Arp: {}", arp);
                     self.arpeggios.push((note_set, Player::init(arp, &self.midi_out)));
                 }
                 let mut i = 0;
@@ -70,6 +69,10 @@ impl<'a> Arpeggiator for PressHold<'a> {
 
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
         drain_and_force_stop_vec(&mut self.arpeggios)
+    }
+
+    fn count_arpeggios(&self) -> usize {
+        self.arpeggios.len()
     }
 }
 
@@ -122,7 +125,6 @@ impl<'a> Arpeggiator for MutatingHold<'a> {
                         let steps: Vec<Step> = self.held_notes.iter().map(|n| Step::note((*n).change_velocity(settings))).collect();
                         let steps_len = steps.len();
                         let arp = Arpeggio::from(steps, steps_len, settings.finish_pattern);
-                        println!("Arp: {}", arp);
                         if let Some(existing) = &mut self.arpeggio {
                             existing.change_arpeggio(arp)?;
                         } else {
@@ -154,6 +156,14 @@ impl<'a> Arpeggiator for MutatingHold<'a> {
             self.arpeggio = None;
         }
         Ok(())
+    }
+
+    fn count_arpeggios(&self) -> usize {
+        if self.arpeggio.is_some() {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -285,5 +295,9 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
 
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
         drain_and_force_stop_map(&mut self.arpeggios)
+    }
+
+    fn count_arpeggios(&self) -> usize {
+        self.arpeggios.len()
     }
 }
