@@ -28,7 +28,6 @@ impl<'a> PressHold<'a> {
     }
 }
 
-//TODO (BUG) something happens when changing quickly where it locks out and will no longer arp (only experienced in MutliArp but that may or may not mean anything)
 impl<'a> Arpeggiator for PressHold<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
