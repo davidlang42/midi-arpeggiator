@@ -12,8 +12,7 @@ pub struct Settings {
     pub finish_pattern: bool,
     pub fixed_velocity: Option<u8>,
     pub mode: ArpeggiatorMode,
-    fixed_steps: Option<usize>,
-    //TODO (SETTINGS) fixed steps per beat, fixed_beats?
+    fixed_steps: Option<usize>, // assumed in 1 beat
     fixed_notes_per_step: Option<usize>,
     pattern: Pattern
 }
@@ -46,14 +45,6 @@ impl Settings {
         Ok(settings)
     }
 }
-
-//TODO (SETTINGS) implement rhythm follower settings getter
-// FIRST: make sure this provides value for the types of arp I need, if it doesn't turn it into a github issue for future reference
-// ** set keyboard rhythm volume to 0, midi out to ch10, pattern to *something* and turn it on
-// ** handle any note-on for ch10 as triggers for arpeggio steps (rather than clock ticks)
-// ** "learn" pattern in first beat (24 ticks) by determining steps based on there being any notes on during a tick (how we do know where the start of the beat is? only matters on non-even rhythms)
-// ** this determines the number and duration of each step, then when notes are played, they are divided evenly between the steps, with extra notes on earlier steps as required
-// ** this requires reading more note-on from midi_out (which currently just reads clock)
 
 pub trait SettingsGetter: MidiReceiver {
     fn get(&self) -> &Settings;
