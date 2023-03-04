@@ -73,7 +73,7 @@ impl<const N: usize> LedStatus<N> {
             data[self.tick].g = 32;
             data[self.tick].b = 32;
         }
-        self.driver.write(data.iter()).unwrap();
+        self.driver.write(data.into_iter()).unwrap();
     }
 }
 
