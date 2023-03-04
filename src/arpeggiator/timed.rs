@@ -43,7 +43,7 @@ impl<'a> Arpeggiator for RepeatRecorder<'a> {
                         status.reset_beat();
                     },
                     _ => {
-                        self.held_notes.insert(n, (Instant::now(), NoteDetails { c, n, v }));
+                        self.held_notes.insert(n, (Instant::now(), NoteDetails::new(c, n, v, settings.fixed_velocity)));
                     }
                 }
             },
@@ -132,7 +132,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                     if self.midi_out.sender.send(received).is_err() {
                         return Err(format!("Unable to forward to output queue").into());
                     }
-                    let d = NoteDetails { c, n, v };
+                    let d = NoteDetails::new(c, n, v, settings.fixed_velocity);
                     self.thru_notes.insert(n, d);
                     self.notes.push((Instant::now(), d));
                 } else if self.arpeggios.contains_key(&n) {

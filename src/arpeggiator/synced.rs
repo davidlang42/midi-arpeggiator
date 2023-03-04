@@ -32,7 +32,7 @@ impl<'a> Arpeggiator for PressHold<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(c, n, v) => {
-                self.held_notes.insert(n, (Instant::now(), NoteDetails { c, n, v }));
+                self.held_notes.insert(n, (Instant::now(), NoteDetails::new(c, n, v, settings.fixed_velocity)));
             },
             MidiMessage::NoteOff(_, n, _) => {
                 self.held_notes.remove(&n);
@@ -99,7 +99,7 @@ impl<'a> Arpeggiator for MutatingHold<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(c, n, v) => {
-                self.held_notes.push(NoteDetails { c, n, v });
+                self.held_notes.push(NoteDetails::new(c, n, v, settings.fixed_velocity));
                 self.changed = true;
             },
             MidiMessage::NoteOff(_, n, _) => {
@@ -123,7 +123,7 @@ impl<'a> Arpeggiator for MutatingHold<'a> {
                             existing.stop();
                         }
                     } else {
-                        let steps: Vec<Step> = self.held_notes.iter().map(|n| Step::note((*n).change_velocity(settings))).collect();
+                        let steps: Vec<Step> = self.held_notes.iter().map(|n| Step::note(*n)).collect();
                         let steps_len = steps.len();
                         let arp = Arpeggio::from(steps, steps_len, settings.finish_pattern);
                         if let Some(existing) = &mut self.arpeggio {
@@ -236,7 +236,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                                 steps.push(Step::notes(step_notes));
                                 step_notes = Vec::new();
                             }
-                            step_notes.push(note.change_velocity(settings));
+                            step_notes.push(note);
                             last_instant = Some(instant);
                         }
                         steps.push(Step::notes(step_notes));
@@ -254,7 +254,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
             MidiMessage::NoteOn(c, n, v) => {
                 if self.pedal {
                     self.midi_out.sender.send(received)?;
-                    let d = NoteDetails { c, n, v };
+                    let d = NoteDetails::new(c, n, v, settings.fixed_velocity);
                     self.thru_notes.insert(n, d);
                     self.notes.push((Instant::now(), d));
                     self.ticks_since_last_note = 0;

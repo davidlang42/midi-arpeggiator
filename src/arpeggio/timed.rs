@@ -71,7 +71,7 @@ impl Arpeggio {
         let mut steps = Vec::new();
         let mut prev_i = start;
         for (instant, note) in notes {
-            steps.push((instant - prev_i, Step::note(note.change_velocity(settings))));
+            steps.push((instant - prev_i, Step::note(note)));
             prev_i = instant;
         }
         steps[0].0 = finish - prev_i;
