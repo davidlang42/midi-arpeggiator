@@ -31,14 +31,14 @@ impl<W: Write> StatusSignal for TextStatus<W> {
     fn update_settings(&mut self, settings: &Settings) {
         if self.settings.is_none() || self.settings.as_ref().unwrap() != settings {
             self.settings = Some(settings.clone());
-            write!(self.writer, "Settings: {:?}", self.settings.as_ref().unwrap()).unwrap();
+            writeln!(self.writer, "{:?}", self.settings.as_ref().unwrap()).unwrap();
         }
     }
 
     fn update_count(&mut self, arpeggios: usize) {
         if self.count.is_none() || self.count.unwrap() != arpeggios {
             self.count = Some(arpeggios);
-            write!(self.writer, "Arpeggio count: {}", self.count.unwrap()).unwrap();
+            writeln!(self.writer, "Arpeggio count: {}", self.count.unwrap()).unwrap();
         }
     }
 

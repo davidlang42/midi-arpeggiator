@@ -33,7 +33,7 @@ fn run(midi_in: &str, midi_out: &str, predefined: Vec<Settings>) -> Result<(), B
     println!("Starting arpeggiator with MIDI-IN: {}, MIDI-OUT: {}", midi_in, midi_out);
     MultiArpeggiator::new(
         &OutputDevice::open(&midi_out)?,
-        TextStatus::new(io::stdout())
+        TextStatus::new(io::stdout().lock())
     ).listen(
         InputDevice::open_with_external_clock(&midi_in, &midi_out)?,
         PredefinedProgramChanges::new(predefined)
