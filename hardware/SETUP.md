@@ -46,10 +46,13 @@ The following instructions describe how I set it up, which worked successfully f
 3. Install rust `curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | sh`
 4. Configure other WiFi networks if required `sudo nano /etc/wpa_supplicant/wpa_supplicant.conf`
 5. Disconnect & reconnect to SSH
-6. Install git `sudo apt update && sudo apt upgrade && sudo install git
-7. Download code `git clone https://github.com/davidlang42/midi-arpeggiator.git`
-8. Build code `cd midi-arpeggiator && cargo build --release`
-9. Make a startup script:
+6. Install git `sudo apt update && sudo apt upgrade && sudo install git`
+7. In order to get `clang-sys` rust library to build on RPi, run the following:
+- `sudo apt-get install llvm-8 llvm libclang1 clang # highly likely that llvm-8 isn't required, also maybe not libclang1 or clang`
+- `sudo ln -s /usr/lib/arm-linux-gnueabihf/libclang-11.so.1 /usr/lib/libclang.so`
+8. Download code `git clone https://github.com/davidlang42/midi-arpeggiator.git`
+9. Build code `cd midi-arpeggiator && cargo build --release`
+10. Make a startup script:
 - `nano ~/run_on_startup`
 - Type this into nano:
 ```
@@ -59,11 +62,11 @@ sleep 10 # to wait for midi devices to be ready
 ```
 - Ctrl+X to exit nano (and save)
 - `chmod a+x ~/run_on_startup`
-10. Make the startup script run on startup:
+11. Make the startup script run on startup:
 - `sudo nano /etc/rc.local`
 - Append this before the last line: `/home/pi/run_on_startup &`
 - Ctrl+X to exit nano (and save)
-11. Make a file containing some arpeggiator settings (see [README](/README.md))
+12. Make a file containing some arpeggiator settings (see [README](/README.md))
 - `nano ~/arpeggiator_settings.json`
 - Type your settings into nano:
 ```
@@ -73,7 +76,7 @@ sleep 10 # to wait for midi devices to be ready
 { "finish_pattern": true, "mode": "SyncedPedalRecorder", "pattern": "Up", "fixed_velocity": 100 }
 ```
 - Ctrl+X to exit nano (and save)
-12. Reboot to make the arpeggiator run (with MIDI devices attached, see [README](/README.md)) `sudo reboot`
-13. Enjoy your Raspberry Pi MIDI arpeggiator!
+13. Reboot to make the arpeggiator run (with MIDI devices attached, see [README](/README.md)) `sudo reboot`
+14. Enjoy your Raspberry Pi MIDI arpeggiator!
 - If you have any suggested improvements, raise an [issue](https://github.com/davidlang42/midi-arpeggiator/issues) or submit a [pull request](https://github.com/davidlang42/midi-arpeggiator/pulls)
 - If you find this useful, consider [buying me a coffee](https://ko-fi.com/davidlang42)
