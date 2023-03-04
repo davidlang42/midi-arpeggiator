@@ -15,8 +15,8 @@ The following instructions describe how I set it up, which worked successfully f
 
 ## SD card setup
 1. On another computer with a microSD card reader, install [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
-1. Insert microSD card into reader and run Raspberry Pi Imager
-1. Follow instructions to flash microSD card with the following details:
+2. Insert microSD card into reader and run Raspberry Pi Imager
+3. Follow instructions to flash microSD card with the following details:
 - Raspberry Pi OS (32 bit) Lite (No Desktop)
 - Enable SSH
 - Set hostname, username (pi) and password
@@ -31,25 +31,25 @@ The following instructions describe how I set it up, which worked successfully f
 ![wires-glowbit](wires-glowbit.jpg)
 ![wires-rpi-top](wires-rpi-top.jpg)
 ![wires-rpi-bottom](wires-rpi-bottom.jpg)
-1. Insert SD card into RPi
-1. Put RPi board into base of case
-1. Use a small amount of superglue to stick the Glowbit in place on the top piece of the case
+2. Insert SD card into RPi
+3. Put RPi board into base of case
+4. Use a small amount of superglue to stick the Glowbit in place on the top piece of the case
 ![case-open](case-open.jpg)
-1. Carefully position excess wire length and clip top & base of case together
+5. Carefully position excess wire length and clip top & base of case together
 ![case-closed](case-closed.jpg)
-1. Use USB OTG hub to connect MIDI devices
-1. Plug in PSU and turn Raspberry Pi on
+6. Use USB OTG hub to connect MIDI devices
+7. Plug in PSU and turn Raspberry Pi on
 
 ## Software configuration
 1. Once the Raspberry Pi has turned on and booted up, it should connect to the WiFi network you configured above, confirm this using `ping HOSTNAME`
-1. Use Putty or SSH in terminal to SSH into the raspberry pi using the username and password you configured above
-1. Install rust `curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | sh`
-1. Configure other WiFi networks if required `sudo nano /etc/wpa_supplicant/wpa_supplicant.conf`
-1. Disconnect & reconnect to SSH
-1. Install git `sudo apt update && sudo apt upgrade && sudo install git
-1. Download code `git clone https://github.com/davidlang42/midi-arpeggiator.git`
-1. Build code `cd midi-arpeggiator && cargo build --release`
-1. Make a startup script:
+2. Use Putty or SSH in terminal to SSH into the raspberry pi using the username and password you configured above
+3. Install rust `curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | sh`
+4. Configure other WiFi networks if required `sudo nano /etc/wpa_supplicant/wpa_supplicant.conf`
+5. Disconnect & reconnect to SSH
+6. Install git `sudo apt update && sudo apt upgrade && sudo install git
+7. Download code `git clone https://github.com/davidlang42/midi-arpeggiator.git`
+8. Build code `cd midi-arpeggiator && cargo build --release`
+9. Make a startup script:
 - `nano ~/run_on_startup`
 - Type this into nano:
 ```
@@ -59,11 +59,11 @@ sleep 10 # to wait for midi devices to be ready
 ```
 - Ctrl+X to exit nano (and save)
 - `chmod a+x ~/run_on_startup`
-1. Make the startup script run on startup:
+10. Make the startup script run on startup:
 - `sudo nano /etc/rc.local`
 - Append this before the last line: `/home/pi/run_on_startup &`
 - Ctrl+X to exit nano (and save)
-1. Make a file containing some arpeggiator settings (see [README](/README.md))
+11. Make a file containing some arpeggiator settings (see [README](/README.md))
 - `nano ~/arpeggiator_settings.json`
 - Type your settings into nano:
 ```
@@ -73,7 +73,7 @@ sleep 10 # to wait for midi devices to be ready
 { "finish_pattern": true, "mode": "SyncedPedalRecorder", "pattern": "Up", "fixed_velocity": 100 }
 ```
 - Ctrl+X to exit nano (and save)
-1. Reboot to make the arpeggiator run (with MIDI devices attached, see [README](/README.md)) `sudo reboot`
-1. Enjoy your Raspberry Pi MIDI arpeggiator!
+12. Reboot to make the arpeggiator run (with MIDI devices attached, see [README](/README.md)) `sudo reboot`
+13. Enjoy your Raspberry Pi MIDI arpeggiator!
 - If you have any suggested improvements, raise an [issue](https://github.com/davidlang42/midi-arpeggiator/issues) or submit a [pull request](https://github.com/davidlang42/midi-arpeggiator/pulls)
 - If you find this useful, consider [buying me a coffee](https://ko-fi.com/davidlang42)
