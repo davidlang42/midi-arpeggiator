@@ -66,7 +66,7 @@ impl<const N: usize> LedStatus<N> {
         status
     }
 
-    fn update_leds(&self) {
+    fn update_leds(&mut self) {
         let mut data: [RGB8; N] = [RGB8::default(); N];
         if self.tick < data.len() {
             data[self.tick].r = 32;
