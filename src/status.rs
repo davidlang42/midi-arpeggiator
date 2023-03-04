@@ -58,7 +58,7 @@ pub struct LedStatus<const N: usize> {
 
 impl<const N: usize> LedStatus<N> {
     pub fn new(pin: u8) -> Self {
-        let status = Self {
+        let mut status = Self {
             driver: Ws2812Rpi::new(N as i32, pin as i32).unwrap(),
             tick: 0
         };
@@ -92,14 +92,16 @@ impl<const N: usize> MidiReceiver for LedStatus<N> {
 }
 
 impl<const N: usize> StatusSignal for LedStatus<N> {
-    fn update_settings(&mut self, settings: &Settings) {
+    fn update_settings(&mut self, _settings: &Settings) {
+        //TODO
         // if self.settings.is_none() || self.settings.as_ref().unwrap() != settings {
         //     self.settings = Some(settings.clone());
         //     writeln!(self.writer, "{:?}", self.settings.as_ref().unwrap()).unwrap();
         // }
     }
 
-    fn update_count(&mut self, arpeggios: usize) {
+    fn update_count(&mut self, _arpeggios: usize) {
+        //TODO
         // if self.count.is_none() || self.count.unwrap() != arpeggios {
         //     self.count = Some(arpeggios);
         //     writeln!(self.writer, "Arpeggio count: {}", self.count.unwrap()).unwrap();
@@ -107,6 +109,7 @@ impl<const N: usize> StatusSignal for LedStatus<N> {
     }
 
     fn reset_beat(&mut self) {
+        //TODO
         // writeln!(self.writer, "**Reset beat**").unwrap();
     }
 }
