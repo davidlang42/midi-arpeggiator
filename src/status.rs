@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use crate::settings::Settings;
-use crate::midi::MidiReceiver;
+use crate::midi::{self, MidiReceiver};
 
 use smart_leds::{SmartLedsWrite, RGB8};
 use wmidi::MidiMessage;
@@ -75,7 +75,7 @@ impl<const N: usize> LedStatus<N> {
     }
 }
 
-impl MidiReceiver for LedStatus {
+impl<const N: usize> MidiReceiver for LedStatus<N> {
     fn passthrough_midi(&mut self, message: wmidi::MidiMessage<'static>) -> Option<wmidi::MidiMessage<'static>> {
         if let MidiMessage::TimingClock = message {
             if self.tick == midi::TICKS_PER_BEAT - 1 {
@@ -89,7 +89,7 @@ impl MidiReceiver for LedStatus {
     }
 }
 
-impl StatusSignal for LedStatus {
+impl<const N: usize> StatusSignal for LedStatus<N> {
     fn update_settings(&mut self, settings: &Settings) {
         // if self.settings.is_none() || self.settings.as_ref().unwrap() != settings {
         //     self.settings = Some(settings.clone());
