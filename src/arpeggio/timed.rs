@@ -5,7 +5,6 @@ use std::thread::{self, JoinHandle};
 use std::fmt;
 use wmidi::{Note, MidiMessage};
 use crate::midi;
-use crate::settings::Settings;
 
 use super::{Step, NoteDetails};
 
@@ -62,7 +61,7 @@ impl Arpeggio {
         panic!("Arpeggio did not contain any notes");
     }
 
-    pub fn from(notes: Vec<(Instant, NoteDetails)>, finish: Instant, finish_steps: bool, settings: &Settings) -> Self {
+    pub fn from(notes: Vec<(Instant, NoteDetails)>, finish: Instant, finish_steps: bool) -> Self {
         if notes.len() == 0 {
             panic!("Cannot construct an Arpeggio without any notes");
         }

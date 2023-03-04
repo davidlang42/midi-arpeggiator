@@ -2,8 +2,6 @@ use std::sync::mpsc;
 use std::fmt;
 use wmidi::{Note, MidiMessage, Velocity, Channel};
 
-use crate::settings::Settings;
-
 pub mod timed;
 pub mod synced;
 
