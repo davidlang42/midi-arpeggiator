@@ -53,7 +53,7 @@ impl<W: Write> StatusSignal for TextStatus<W> {
 
 pub struct LedStatus<const N: usize> {
     driver: Ws2812Rpi,
-    tick: u8
+    tick: usize
 }
 
 impl<const N: usize> LedStatus<N> {
