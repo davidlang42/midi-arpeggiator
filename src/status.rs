@@ -43,6 +43,6 @@ impl<W: Write> StatusSignal for TextStatus<W> {
     }
 
     fn reset_beat(&mut self) {
-        write!(self.writer, "**Reset beat**").unwrap();
+        writeln!(self.writer, "**Reset beat**").unwrap();
     }
 }
