@@ -108,17 +108,21 @@ impl<'a, SS: StatusSignal> MultiArpeggiator<'a, SS> {
         let mut mode = settings.get().mode;
         let mut current: Box<dyn Arpeggiator> = mode.create(self.midi_out);
         for message in &midi_in.receiver {
-            let pass_through = settings.passthrough_midi(message);
-            self.status.update_settings(settings.get());
-            let new_mode = settings.get().mode;
-            if new_mode != mode {
-                mode = new_mode;
-                current.stop_arpeggios()?;
-                current = new_mode.create(self.midi_out);
-            }
-            if let Some(passed_through) = pass_through {
-                current.process(passed_through, settings.get(), &mut self.status)?;
-                self.status.update_count(current.count_arpeggios());
+            //TODO fix this up and probably go through status last?
+            let after_status = self.status.passthrough_midi(message);
+            if let Some(before_settings) = after_status {
+                let after_settings = settings.passthrough_midi(before_settings);
+                self.status.update_settings(settings.get());
+                let new_mode = settings.get().mode;
+                if new_mode != mode {
+                    mode = new_mode;
+                    current.stop_arpeggios()?;
+                    current = new_mode.create(self.midi_out);
+                }
+                if let Some(before_arp) = after_settings {
+                    current.process(before_arp, settings.get(), &mut self.status)?;
+                    self.status.update_count(current.count_arpeggios());
+                }
             }
         }
         Ok(())
