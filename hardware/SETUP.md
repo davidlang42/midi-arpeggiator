@@ -48,7 +48,7 @@ The following instructions describe how I set it up, which worked successfully f
 5. Disconnect & reconnect to SSH
 6. Install git `sudo apt update && sudo apt upgrade && sudo install git`
 7. In order to get `clang-sys` rust library to build on RPi, run the following:
-- `sudo apt-get install llvm-8 llvm libclang1 clang # highly likely that llvm-8 isn't required, also maybe not libclang1 or clang`
+- `sudo apt-get install llvm clang`
 - `sudo ln -s /usr/lib/arm-linux-gnueabihf/libclang-11.so.1 /usr/lib/libclang.so`
 8. Download code `git clone https://github.com/davidlang42/midi-arpeggiator.git`
 9. Build code `cd midi-arpeggiator && cargo build --release`
