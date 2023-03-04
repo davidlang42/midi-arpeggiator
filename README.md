@@ -27,3 +27,5 @@ The MIDI-IN and MIDI-OUT devices are determined as follows:
 - If 3 or more devices are found (or none), then the arpeggiator will exit with an error
 
 In order to use multiple types of arpeggiation, the arpeggiator listen to MIDI program changes (0-127) matching the index of the settings object in the SETTINGS file.
+
+For instructions on how to run this on a Raspberry Pi 0w, click [here](hardware/SETUP.md).
