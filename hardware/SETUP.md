@@ -28,10 +28,15 @@ The following instructions describe how I set it up, which worked successfully f
 - Red wire 5V on RPi (pin 2) to Vcc on Glowbit
 - Black wire GND on RPi (pin 6) to Gnd on Glowbit
 - Yellow wire GPIO18 on RPi (pin 12) to Din on Glowbit
+![wires-glowbit](wires-glowbit.jpg)
+![wires-rpi-top](wires-rpi-top.jpg)
+![wires-rpi-bottom](wires-rpi-bottom.jpg)
 1. Insert SD card into RPi
 1. Put RPi board into base of case
 1. Use a small amount of superglue to stick the Glowbit in place on the top piece of the case
+![case-open](case-open.jpg)
 1. Carefully position excess wire length and clip top & base of case together
+![case-closed](case-closed.jpg)
 1. Use USB OTG hub to connect MIDI devices
 1. Plug in PSU and turn Raspberry Pi on
 
