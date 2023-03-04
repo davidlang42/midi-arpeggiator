@@ -6,6 +6,8 @@ use settings::{PredefinedProgramChanges, Settings};
 use midi::{InputDevice, OutputDevice, ClockDevice};
 use status::TextStatus;
 
+use crate::status::LedStatus;
+
 mod midi;
 mod arpeggio;
 mod arpeggiator;
@@ -33,7 +35,8 @@ fn run(midi_in: &str, midi_out: &str, predefined: Vec<Settings>) -> Result<(), B
     println!("Starting arpeggiator with MIDI-IN: {}, MIDI-OUT: {}", midi_in, midi_out);
     MultiArpeggiator::new(
         &OutputDevice::open(&midi_out)?,
-        TextStatus::new(io::stdout().lock())
+        //TextStatus::new(io::stdout().lock())
+        LedStatus::<8>::new(18)
     ).listen(
         InputDevice::open_with_external_clock(&midi_in, &midi_out)?,
         PredefinedProgramChanges::new(predefined)
