@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fs;
+use std::time::Instant;
 
 use wmidi::{MidiMessage, ControlFunction, U7};
 
@@ -97,5 +98,46 @@ impl PredefinedProgramChanges {
             pc: 0,
             index: 0
         }
+    }
+}
+
+pub struct BpmDetector {
+    ticks: usize,
+    last_beat: Instant,
+    last_bpm: usize
+}
+
+impl BpmDetector {
+    pub fn new() -> Self {
+        Self {
+            ticks: 0,
+            last_beat: Instant::now(),
+            last_bpm: 0
+        }
+    }
+
+    pub fn get(&self) -> usize {
+        self.last_bpm
+    }
+}
+
+impl MidiReceiver for BpmDetector {
+    fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
+        if let MidiMessage::TimingClock = message {
+            self.ticks += 1;
+            if self.ticks == 24 {
+                self.ticks = 0;
+                let now = Instant::now();
+                let ns = now.duration_since(self.last_beat).as_nanos();
+                self.last_beat = now;
+                let bpm = (60000000000.0 / ns as f64).round() as usize;
+                if bpm != self.last_bpm {
+                    self.last_bpm = bpm;
+                    //TODO test on raspberry pi zero (on laptop this was accurate up to 200bpm)
+                    println!("{}ns = {}bpm", ns, bpm);
+                }
+            }
+        }
+        Some(message)
     }
 }
