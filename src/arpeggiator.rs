@@ -11,7 +11,7 @@ use crate::settings::{Settings, SettingsGetter};
 pub mod timed;
 pub mod synced;
 
-#[derive(Clone, EnumIter, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, EnumIter, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Pattern {
     Up,
     Down
@@ -108,7 +108,6 @@ impl<'a, SS: StatusSignal> MultiArpeggiator<'a, SS> {
         let mut mode = settings.get().mode;
         let mut current: Box<dyn Arpeggiator> = mode.create(self.midi_out);
         for message in &midi_in.receiver {
-            //TODO fix this up and probably go through status last?
             let after_status = self.status.passthrough_midi(message);
             if let Some(before_settings) = after_status {
                 let after_settings = settings.passthrough_midi(before_settings);

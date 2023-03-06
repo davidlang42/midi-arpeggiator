@@ -12,9 +12,9 @@ pub struct Settings {
     pub finish_pattern: bool,
     pub fixed_velocity: Option<u8>,
     pub mode: ArpeggiatorMode,
-    fixed_steps: Option<usize>, // assumed in 1 beat
+    pub fixed_steps: Option<usize>, // assumed in 1 beat
     fixed_notes_per_step: Option<usize>,
-    pattern: Pattern
+    pub pattern: Pattern
 }
 
 impl Settings {

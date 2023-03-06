@@ -1,5 +1,7 @@
+use std::cmp::min;
 use std::io::Write;
 
+use crate::arpeggiator::Pattern;
 use crate::settings::Settings;
 use crate::midi::{self, MidiReceiver};
 
@@ -20,7 +22,7 @@ pub struct TextStatus<W: Write> {
 }
 
 impl<W: Write> TextStatus<W> {
-    pub fn new(writer: W) -> Self {
+    pub fn _new(writer: W) -> Self {
         Self {
             count: None,
             settings: None,
@@ -53,14 +55,20 @@ impl<W: Write> StatusSignal for TextStatus<W> {
 
 pub struct LedStatus<const N: usize> {
     driver: Ws2812Rpi,
-    tick: usize
+    tick: usize,
+    running: bool, // runs green if true, red if false
+    fixed_steps: Option<usize>, // bar graph from 0 in white
+    pattern: Pattern // sets run direction
 }
 
 impl<const N: usize> LedStatus<N> {
     pub fn new(pin: u8) -> Self {
         let mut status = Self {
             driver: Ws2812Rpi::new(N as i32, pin as i32).unwrap(),
-            tick: 0
+            tick: 0,
+            running: false,
+            fixed_steps: None,
+            pattern: Pattern::Up
         };
         status.update_leds();
         status
@@ -68,10 +76,21 @@ impl<const N: usize> LedStatus<N> {
 
     fn update_leds(&mut self) {
         let mut data: [RGB8; N] = [RGB8::default(); N];
+        if let Some(steps) = self.fixed_steps {
+            for i in 0..min(data.len(), steps) {
+                data[i] = RGB8::new(32, 32, 32);
+            }
+        }
         if self.tick < data.len() {
-            data[self.tick].r = 32;
-            data[self.tick].g = 32;
-            data[self.tick].b = 32;
+            let index = match self.pattern {
+                Pattern::Up => self.tick,
+                Pattern::Down => data.len() - self.tick
+            };
+            data[index] = if self.running {
+                RGB8::new(0, 32, 0)
+            } else {
+                RGB8::new(32, 0, 0)
+            };
         }
         self.driver.write(data.into_iter()).unwrap();
     }
@@ -92,24 +111,16 @@ impl<const N: usize> MidiReceiver for LedStatus<N> {
 }
 
 impl<const N: usize> StatusSignal for LedStatus<N> {
-    fn update_settings(&mut self, _settings: &Settings) {
-        //TODO
-        // if self.settings.is_none() || self.settings.as_ref().unwrap() != settings {
-        //     self.settings = Some(settings.clone());
-        //     writeln!(self.writer, "{:?}", self.settings.as_ref().unwrap()).unwrap();
-        // }
+    fn update_settings(&mut self, settings: &Settings) {
+        self.fixed_steps = settings.fixed_steps;
+        self.pattern = settings.pattern;
     }
 
-    fn update_count(&mut self, _arpeggios: usize) {
-        //TODO
-        // if self.count.is_none() || self.count.unwrap() != arpeggios {
-        //     self.count = Some(arpeggios);
-        //     writeln!(self.writer, "Arpeggio count: {}", self.count.unwrap()).unwrap();
-        // }
+    fn update_count(&mut self, arpeggios: usize) {
+        self.running = arpeggios > 0;
     }
 
     fn reset_beat(&mut self) {
-        //TODO
-        // writeln!(self.writer, "**Reset beat**").unwrap();
+        self.tick = 0;
     }
 }
