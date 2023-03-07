@@ -130,7 +130,7 @@ impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
             // pass message through status
             if m.is_none() { continue; }
             println!("Status: {:?}", m.unwrap());
-            m = self.settings.passthrough_midi(m.unwrap());
+            m = self.status.passthrough_midi(m.unwrap());
             // process message in arp
             if m.is_none() { continue; }
             println!("Arp: {:?}", m.unwrap());
