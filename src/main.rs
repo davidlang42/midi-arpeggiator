@@ -38,10 +38,7 @@ fn run(midi_in: &str, midi_out: &str, predefined: Vec<Settings>) -> Result<(), B
         midi_out: OutputDevice::open(&midi_out)?,
         settings: PredefinedProgramChanges::new(predefined),
         status: LedStatus::<8>::new(18)
-    }.listen_with_midi_receivers(vec![
-        //TODO remove extra receivers after testing
-        &mut NoteCounter::new(wmidi::Channel::Ch10)
-    ])
+    }.listen()
 }
 
 fn list_files(root: &str, prefix: &str) -> Result<Vec<String>, Box<dyn Error>> {

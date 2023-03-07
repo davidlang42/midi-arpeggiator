@@ -99,7 +99,7 @@ pub struct MultiArpeggiator<SG: SettingsGetter, SS: StatusSignal> {
 }
 
 impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
-    pub fn _listen(self) -> Result<(), Box<dyn Error>> {
+    pub fn listen(self) -> Result<(), Box<dyn Error>> {
         self.listen_with_midi_receivers(Vec::new())
     }
 

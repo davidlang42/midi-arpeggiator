@@ -150,7 +150,7 @@ pub struct NoteCounter {
 impl NoteCounter {
     const COUNT_PERIOD: usize = midi::TICKS_PER_BEAT; // 1 quarter note
 
-    pub fn new(midi_channel: Channel) -> Self {
+    pub fn _new(midi_channel: Channel) -> Self {
         Self {
             midi_channel,
             ticks: 0,
@@ -174,8 +174,6 @@ impl MidiReceiver for NoteCounter {
                     let note_count = self.notes.iter().filter(|&&c| c > 0).count();
                     if note_count != self.last_note_count {
                         self.last_note_count = note_count;
-                        //TODO test on raspberry pi zero
-                        println!("Found {}/{} ticks had any notes", note_count, Self::COUNT_PERIOD);
                     }
                     for i in 0..Self::COUNT_PERIOD {
                         self.notes[i] = 0;
