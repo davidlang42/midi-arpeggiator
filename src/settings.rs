@@ -116,7 +116,7 @@ impl BpmDetector {
         }
     }
 
-    pub fn get(&self) -> usize {
+    pub fn _get(&self) -> usize {
         self.last_bpm
     }
 }
@@ -161,7 +161,7 @@ impl NoteCounter {
         }
     }
 
-    pub fn get(&self) -> usize {
+    pub fn _get(&self) -> usize {
         self.last_note_count
     }
 }

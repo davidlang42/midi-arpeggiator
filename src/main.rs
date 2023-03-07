@@ -5,6 +5,7 @@ use arpeggiator::MultiArpeggiator;
 use settings::{PredefinedProgramChanges, Settings};
 use midi::{InputDevice, OutputDevice, ClockDevice};
 
+use crate::settings::{BpmDetector, NoteCounter};
 use crate::status::LedStatus;
 
 mod midi;
@@ -32,13 +33,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn run(midi_in: &str, midi_out: &str, predefined: Vec<Settings>) -> Result<(), Box<dyn Error>> {
     println!("Starting arpeggiator with MIDI-IN: {}, MIDI-OUT: {}", midi_in, midi_out);
-    MultiArpeggiator::new(
-        &OutputDevice::open(&midi_out)?,
-        LedStatus::<8>::new(18)
-    ).listen(
-        InputDevice::open_with_external_clock(&midi_in, &midi_out)?,
-        PredefinedProgramChanges::new(predefined)
-    )
+    MultiArpeggiator {
+        midi_in: InputDevice::open_with_external_clock(&midi_in, &midi_out)?,
+        midi_out: OutputDevice::open(&midi_out)?,
+        settings: PredefinedProgramChanges::new(predefined),
+        status: LedStatus::<8>::new(18)
+    }.listen_with_midi_receivers(vec![
+        &mut BpmDetector::new(),
+        &mut NoteCounter::new(wmidi::Channel::Ch10)
+    ])
 }
 
 fn list_files(root: &str, prefix: &str) -> Result<Vec<String>, Box<dyn Error>> {
