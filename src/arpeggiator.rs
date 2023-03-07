@@ -108,7 +108,7 @@ impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
         let mut current: Box<dyn Arpeggiator> = mode.create(&self.midi_out);
         loop {
             let mut m = Some(self.midi_in.read()?);
-            println!("Read: {:?}", m.as_ref().unwrap());
+            println!("Read: {:?}", m.unwrap());
             // pass message through extra receivers
             for midi_receiver in extra_midi_receivers.iter_mut() {
                 m = midi_receiver.passthrough_midi(m.unwrap());
@@ -116,7 +116,7 @@ impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
             }
             // pass message through settings
             if m.is_none() { continue; }
-            println!("Settings: {:?}", m.as_ref().unwrap());
+            println!("Settings: {:?}", m.unwrap());
             m = self.settings.passthrough_midi(m.unwrap());
             // handle settings changes
             self.status.update_settings(self.settings.get());
@@ -129,11 +129,11 @@ impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
             }
             // pass message through status
             if m.is_none() { continue; }
-            println!("Status: {:?}", m.as_ref().unwrap());
+            println!("Status: {:?}", m.unwrap());
             m = self.status.passthrough_midi(m.unwrap());
             // process message in arp
             if m.is_none() { continue; }
-            println!("Arp: {:?}", m.as_ref().unwrap());
+            println!("Arp: {:?}", m.unwrap());
             current.process(m.unwrap(), self.settings.get(), &mut self.status)?;
             self.status.update_count(current.count_arpeggios());
         }
