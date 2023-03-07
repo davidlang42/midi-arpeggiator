@@ -152,15 +152,27 @@ impl ClockDevice {
 
     fn read_clocks_into_queue(f: &mut fs::File, tx: mpsc::Sender<MidiMessage>) {
         let mut buf: [u8; 1] = [0; 1];
+        let mut bytes = Vec::new();
         while f.read_exact(&mut buf).is_ok() {
-            if buf[0] == Self::MIDI_TICK {
-                // tick detected, send to queue
-                if tx.send(MidiMessage::TimingClock).is_err() {
-                    panic!("Error sending to queue.");
+            bytes.push(buf[0]);
+            match MidiMessage::try_from(bytes.as_slice()) {
+                Ok(message) => {
+                    // message complete, send to queue
+                    if tx.send(message.to_owned()).is_err() {
+                        panic!("Error sending to queue.");
+                    }
+                    bytes.clear();
+                },
+                Err(FromBytesError::NoBytes) | Err(FromBytesError::NoSysExEndByte) | Err(FromBytesError::NotEnoughBytes) => {
+                    // wait for more bytes
+                }, 
+                _ => {
+                    // invalid message, clear and wait for next message
+                    bytes.clear();
                 }
             }
         }
-        panic!("Clock device has disconnected.");
+        panic!("Input device has disconnected.");
     }
 }
 
