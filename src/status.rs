@@ -81,17 +81,16 @@ impl<const N: usize> LedStatus<N> {
                 data[i] = RGB8::new(16, 16, 16);
             }
         }
-        if self.tick < data.len() {
-            let index = match self.pattern {
-                Pattern::Up => self.tick,
-                Pattern::Down => data.len() - self.tick - 1
-            };
-            data[index] = if self.running {
-                RGB8::new(0, 128, 0)
-            } else {
-                RGB8::new(128, 0, 0)
-            };
-        }
+        let progress = self.tick * data.len() / midi::TICKS_PER_BEAT;
+        let index = match self.pattern {
+            Pattern::Up => progress,
+            Pattern::Down => data.len() - progress - 1
+        };
+        data[index] = if self.running {
+            RGB8::new(0, 64, 0)
+        } else {
+            RGB8::new(64, 0, 0)
+        };
         self.driver.write(data.into_iter()).unwrap();
     }
 }
