@@ -40,7 +40,6 @@ fn run(midi_in: &str, midi_out: &str, predefined: Vec<Settings>) -> Result<(), B
         status: LedStatus::<8>::new(18)
     }.listen_with_midi_receivers(vec![
         //TODO remove extra receivers after testing
-        &mut BpmDetector::new(),
         &mut NoteCounter::new(wmidi::Channel::Ch10)
     ])
 }

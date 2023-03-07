@@ -133,8 +133,6 @@ impl MidiReceiver for BpmDetector {
                 let bpm = (60000000000.0 / ns as f64).round() as usize;
                 if bpm != self.last_bpm {
                     self.last_bpm = bpm;
-                    //TODO test on raspberry pi zero (on laptop this was accurate up to 200bpm)
-                    println!("{}ns = {}bpm", ns, bpm);
                 }
             }
         }
