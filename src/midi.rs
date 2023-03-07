@@ -4,6 +4,7 @@ use std::fs;
 use std::thread;
 use std::io::{Read, Write};
 use std::error::Error;
+use std::thread::JoinHandle;
 use std::time::Duration;
 use wmidi::FromBytesError;
 use wmidi::MidiMessage;
@@ -17,7 +18,8 @@ pub trait MidiReceiver {
 }
 
 pub struct InputDevice {
-    pub receiver: mpsc::Receiver<MidiMessage<'static>>
+    pub receiver: mpsc::Receiver<MidiMessage<'static>>,
+    threads: Vec<JoinHandle<()>>
 }
 
 pub struct ClockDevice {
@@ -25,7 +27,8 @@ pub struct ClockDevice {
 }
 
 pub struct OutputDevice {
-    pub sender: mpsc::Sender<MidiMessage<'static>>
+    pub sender: mpsc::Sender<MidiMessage<'static>>,
+    thread: JoinHandle<()>
 }
 
 pub const TICKS_PER_BEAT: usize = 24;
@@ -34,9 +37,10 @@ impl InputDevice {
     pub fn _open(midi_in: &str, include_clock_ticks: bool) -> Result<Self, Box<dyn Error>> {
         let (tx, rx) = mpsc::channel();
         let mut input = fs::File::options().read(true).open(midi_in).map_err(|e| format!("Cannot open MIDI IN '{}': {}", midi_in, e))?;
-        thread::Builder::new().name(format!("midi-in")).spawn(move || Self::read_into_queue(&mut input, tx, include_clock_ticks, true))?;
+        let join_handle = thread::Builder::new().name(format!("midi-in")).spawn(move || Self::read_into_queue(&mut input, tx, include_clock_ticks, true))?;
         Ok(Self {
-            receiver: rx
+            receiver: rx,
+            threads: vec![join_handle]
         })
     }
 
@@ -45,12 +49,14 @@ impl InputDevice {
         let include_clock_ticks = midi_in == clock_in;
         let mut input = fs::File::options().read(true).open(midi_in).map_err(|e| format!("Cannot open MIDI IN '{}': {}", midi_in, e))?;
         let clock = ClockDevice::init(clock_in)?;
+        let mut threads = Vec::new();
         if !include_clock_ticks {
-            clock.connect(tx.clone())?;
+            threads.push(clock.connect(tx.clone())?);
         }
-        thread::Builder::new().name(format!("midi-in")).spawn(move || Self::read_into_queue(&mut input, tx, include_clock_ticks, true))?;
+        threads.push(thread::Builder::new().name(format!("midi-in")).spawn(move || Self::read_into_queue(&mut input, tx, include_clock_ticks, true))?);
         Ok(Self {
-            receiver: rx
+            receiver: rx,
+            threads
         })
     }
 
@@ -128,11 +134,10 @@ impl ClockDevice {
         }
     }
 
-    pub fn connect(self, sender: mpsc::Sender<MidiMessage<'static>>) -> Result<(), Box<dyn Error>> {
+    pub fn connect(self, sender: mpsc::Sender<MidiMessage<'static>>) -> Result<JoinHandle<()>, Box<dyn Error>> {
         let mut clock = fs::File::options().read(true).open(&self.path)
             .map_err(|e| format!("Cannot open Clock device '{}': {}", self.path.display(), e))?;
-        thread::Builder::new().name(format!("midi-clock")).spawn(move || Self::read_clocks_into_queue(&mut clock, sender))?;
-        Ok(())
+        Ok(thread::Builder::new().name(format!("midi-clock")).spawn(move || Self::read_clocks_into_queue(&mut clock, sender))?)
     }
 
     fn read_clocks_into_queue(f: &mut fs::File, tx: mpsc::Sender<MidiMessage>) {
@@ -153,9 +158,10 @@ impl OutputDevice {
     pub fn open(midi_out: &str) -> Result<Self, Box<dyn Error>> {
         let (tx, rx) = mpsc::channel();
         let mut output = fs::File::options().write(true).open(midi_out).map_err(|e| format!("Cannot open MIDI OUT '{}': {}", midi_out, e))?;
-        thread::Builder::new().name(format!("midi-out")).spawn(move || Self::write_from_queue(&mut output, rx))?;
+        let thread = thread::Builder::new().name(format!("midi-out")).spawn(move || Self::write_from_queue(&mut output, rx))?;
         Ok(Self {
-            sender: tx
+            sender: tx,
+            thread
         })
     }
 
