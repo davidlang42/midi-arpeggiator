@@ -63,8 +63,7 @@ impl InputDevice {
     pub fn read(&mut self) -> Result<MidiMessage<'static>, mpsc::RecvError> {
         for thread in &self.threads {
             if thread.is_finished() {
-                //TODO thread.join(); // panic if thread has paniced
-                panic!("Thread finished");
+                panic!("InputDevice thread finished");
             }
         }
         self.receiver.recv()
@@ -177,8 +176,7 @@ impl OutputDevice {
 
     pub fn send(&self, message: MidiMessage<'static>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         if self.thread.is_finished() {
-            //TODO self.thread.join(); // panic if thread has paniced
-            panic!("Thread finished");
+            panic!("OutputDevice thread finished");
         }
         self.sender.send(message)
     }
