@@ -108,7 +108,7 @@ pub struct BpmDetector {
 }
 
 impl BpmDetector {
-    pub fn new() -> Self {
+    pub fn _new() -> Self {
         Self {
             ticks: 0,
             last_beat: Instant::now(),

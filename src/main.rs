@@ -5,7 +5,7 @@ use arpeggiator::MultiArpeggiator;
 use settings::{PredefinedProgramChanges, Settings};
 use midi::{InputDevice, OutputDevice, ClockDevice};
 
-use crate::settings::{BpmDetector, NoteCounter};
+use crate::settings::NoteCounter;
 use crate::status::LedStatus;
 
 mod midi;
