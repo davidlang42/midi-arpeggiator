@@ -87,9 +87,9 @@ impl<const N: usize> LedStatus<N> {
                 Pattern::Down => data.len() - self.tick - 1
             };
             data[index] = if self.running {
-                RGB8::new(0, 32, 0)
+                RGB8::new(0, 16, 0)
             } else {
-                RGB8::new(32, 0, 0)
+                RGB8::new(255, 0, 0)
             };
         }
         self.driver.write(data.into_iter()).unwrap();
