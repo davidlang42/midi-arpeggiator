@@ -84,7 +84,7 @@ impl<const N: usize> LedStatus<N> {
         if self.tick < data.len() {
             let index = match self.pattern {
                 Pattern::Up => self.tick,
-                Pattern::Down => data.len() - self.tick
+                Pattern::Down => data.len() - self.tick - 1
             };
             data[index] = if self.running {
                 RGB8::new(0, 32, 0)
