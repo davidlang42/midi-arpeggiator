@@ -19,6 +19,9 @@ pub enum Pattern {
 
 impl Pattern {
     pub fn of(&self, mut notes: Vec<NoteDetails>, steps: usize) -> Vec<Step> {
+        if steps == 0 {
+            panic!("Cannot generate Pattern in 0 steps");
+        }
         // put the notes in order based on the pattern type
         match self {
             Pattern::Up => notes.sort_by(|a, b| a.n.cmp(&b.n)),
@@ -51,14 +54,13 @@ impl Pattern {
 
     fn expand(notes: &mut Vec<NoteDetails>) {
         // create extra notes by repeating the existing notes in reverse
-        let range = if notes.len() == 2 {
-            // if there are only 2 notes, repeat them both
-            (0..2).rev()
-        } else {
-            // otherwise repeat all except first and last notes
-            (1..(notes.len() - 1)).rev()
+        let range = match notes.len() {
+            0 => panic!("Cannot generate Pattern of 0 notes"),
+            1 => 0..1, // if there is only 1 note, repeat it
+            2 => 0..2, // if there are only 2 notes, repeat them both
+            _ => 1..(notes.len() - 1) // otherwise repeat all except first and last notes
         };
-        for i in range {
+        for i in range.rev() {
             notes.push(notes[i].clone())
         }
     }

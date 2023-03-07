@@ -46,7 +46,8 @@ impl<'a> Arpeggiator for PressHold<'a> {
                 if self.held_notes.len() != 0 && self.held_notes.values().map(|(i, _)| i).min().unwrap().elapsed().as_millis() > Self::TRIGGER_TIME_MS {
                     let note_details: Vec<NoteDetails> = self.held_notes.drain().map(|(_, (_, d))| d).collect();
                     let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
-                    let arp = Arpeggio::from(settings.generate_steps(note_details), 1, settings.finish_pattern);
+                    let steps = settings.generate_steps(note_details);
+                    let arp = Arpeggio::from(steps, 1, settings.finish_pattern);
                     self.arpeggios.push((note_set, Player::init(arp, &self.midi_out)));
                     status.reset_beat();
                 }
