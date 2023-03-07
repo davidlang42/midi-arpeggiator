@@ -166,6 +166,7 @@ impl NoteCounter {
 
 impl MidiReceiver for NoteCounter {
     fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
+        println!("NoteCounter: {:?}", message);
         match message {
             MidiMessage::TimingClock => {
                 self.ticks += 1;
