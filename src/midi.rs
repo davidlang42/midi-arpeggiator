@@ -93,7 +93,7 @@ impl InputDevice {
                 }
             }
         }
-        println!("NOTE: Input device is not connected.");
+        panic!("Input device has disconnected.");
     }
 }
 
@@ -150,7 +150,7 @@ impl ClockDevice {
                 }
             }
         }
-        println!("NOTE: Clock device is not connected.");
+        panic!("Clock device has disconnected.");
     }
 }
 
