@@ -4,9 +4,7 @@ use std::error::Error;
 use arpeggiator::MultiArpeggiator;
 use settings::{PredefinedProgramChanges, Settings};
 use midi::{InputDevice, OutputDevice, ClockDevice};
-
-use crate::settings::NoteCounter;
-use crate::status::LedStatus;
+use status::LedStatus;
 
 mod midi;
 mod arpeggio;
