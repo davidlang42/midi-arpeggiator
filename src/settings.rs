@@ -2,11 +2,11 @@ use std::error::Error;
 use std::fs;
 use std::time::Instant;
 
-use wmidi::{MidiMessage, ControlFunction, U7};
+use wmidi::{MidiMessage, ControlFunction, U7, Channel};
 
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggiator::{Pattern, ArpeggiatorMode};
-use crate::midi::MidiReceiver;
+use crate::midi::{MidiReceiver, self};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Settings {
@@ -139,5 +139,57 @@ impl MidiReceiver for BpmDetector {
             }
         }
         Some(message)
+    }
+}
+
+pub struct NoteCounter {
+    midi_channel: Channel,
+    notes: [usize; Self::COUNT_PERIOD],
+    ticks: usize,
+    last_note_count: usize
+}
+
+impl NoteCounter {
+    const COUNT_PERIOD: usize = midi::TICKS_PER_BEAT; // 1 quarter note
+
+    pub fn new(midi_channel: Channel) -> Self {
+        Self {
+            midi_channel,
+            ticks: 0,
+            notes: [0; Self::COUNT_PERIOD],
+            last_note_count: 0,
+        }
+    }
+
+    pub fn get(&self) -> usize {
+        self.last_note_count
+    }
+}
+
+impl MidiReceiver for NoteCounter {
+    fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
+        match message {
+            MidiMessage::TimingClock => {
+                self.ticks += 1;
+                if self.ticks == self.notes.len() {
+                    self.ticks = 0;
+                    let note_count = self.notes.iter().filter(|&&c| c > 0).count();
+                    if note_count != self.last_note_count {
+                        self.last_note_count = note_count;
+                        //TODO test on raspberry pi zero
+                        println!("Found {}/{} ticks had any notes", note_count, Self::COUNT_PERIOD);
+                    }
+                    for i in 0..Self::COUNT_PERIOD {
+                        self.notes[i] = 0;
+                    }
+                }
+                Some(message)
+            },
+            MidiMessage::NoteOn(c, _, _) if c == self.midi_channel => {
+                self.notes[self.ticks] += 1;
+                None // don't forward notes on this channel
+            },
+            _ => Some(message)
+        }
     }
 }
