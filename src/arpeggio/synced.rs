@@ -83,7 +83,7 @@ impl Player {
             wait_ticks: 0,
             should_stop: false,
             last_step: OptionIndex::None,
-            midi_out: midi_out.sender.clone()
+            midi_out: midi_out.clone_sender()
         }
     }
 

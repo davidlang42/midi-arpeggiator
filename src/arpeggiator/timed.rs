@@ -109,7 +109,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                 } else {
                     self.pedal = false;
                     for (_, thru_note) in self.thru_notes.drain() {
-                        if self.midi_out.sender.send(MidiMessage::NoteOff(thru_note.c, thru_note.n, thru_note.v)).is_err() {
+                        if self.midi_out.send(MidiMessage::NoteOff(thru_note.c, thru_note.n, thru_note.v)).is_err() {
                             return Err(format!("Unable to send to output queue").into());
                         }
                     }
@@ -129,7 +129,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
             },
             MidiMessage::NoteOn(c, n, v) => {
                 if self.pedal {
-                    if self.midi_out.sender.send(received).is_err() {
+                    if self.midi_out.send(received).is_err() {
                         return Err(format!("Unable to forward to output queue").into());
                     }
                     let d = NoteDetails::new(c, n, v, settings.fixed_velocity);
@@ -146,7 +146,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
             },
             MidiMessage::NoteOff(_, n, _) => {
                 if self.pedal {
-                    if self.midi_out.sender.send(received).is_err() {
+                    if self.midi_out.send(received).is_err() {
                         return Err(format!("Unable to forward to output queue").into());
                     }
                     self.thru_notes.remove(&n);

@@ -97,7 +97,7 @@ pub struct Player{
 
 impl Player {
     pub fn start(arpeggio: Arpeggio, midi_out: &midi::OutputDevice) -> Result<Self, Box<dyn Error>> {
-        let sender_cloned = midi_out.sender.clone();
+        let sender_cloned = midi_out.clone_sender();
         let should_stop = Arc::new(AtomicBool::new(false));
         let should_stop_cloned = Arc::clone(&should_stop);
         let thread = thread::Builder::new().name(format!("arp:{}", arpeggio)).spawn(move || arpeggio.play(sender_cloned, should_stop_cloned))?;

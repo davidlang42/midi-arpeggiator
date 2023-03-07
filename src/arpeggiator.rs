@@ -106,8 +106,8 @@ impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
     pub fn listen_with_midi_receivers(mut self, mut extra_midi_receivers: Vec<&mut dyn MidiReceiver>) -> Result<(), Box<dyn Error>> {
         let mut mode = self.settings.get().mode;
         let mut current: Box<dyn Arpeggiator> = mode.create(&self.midi_out);
-        for message in self.midi_in.receiver {
-            let mut m = Some(message);
+        loop {
+            let mut m = Some(self.midi_in.read()?);
             // pass message through extra receivers
             for midi_receiver in extra_midi_receivers.iter_mut() {
                 m = midi_receiver.passthrough_midi(m.unwrap());
@@ -133,6 +133,5 @@ impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
             current.process(m.unwrap(), self.settings.get(), &mut self.status)?;
             self.status.update_count(current.count_arpeggios());
         }
-        Ok(())
     }
 }

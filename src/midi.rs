@@ -18,7 +18,7 @@ pub trait MidiReceiver {
 }
 
 pub struct InputDevice {
-    pub receiver: mpsc::Receiver<MidiMessage<'static>>,
+    receiver: mpsc::Receiver<MidiMessage<'static>>,
     threads: Vec<JoinHandle<()>>
 }
 
@@ -27,7 +27,7 @@ pub struct ClockDevice {
 }
 
 pub struct OutputDevice {
-    pub sender: mpsc::Sender<MidiMessage<'static>>,
+    sender: mpsc::Sender<MidiMessage<'static>>,
     thread: JoinHandle<()>
 }
 
@@ -58,6 +58,16 @@ impl InputDevice {
             receiver: rx,
             threads
         })
+    }
+
+    pub fn read(&mut self) -> Result<MidiMessage<'static>, mpsc::RecvError> {
+        for thread in &self.threads {
+            if thread.is_finished() {
+                //TODO thread.join(); // panic if thread has paniced
+                panic!("Thread finished");
+            }
+        }
+        self.receiver.recv()
     }
 
     fn read_into_queue(f: &mut fs::File, tx: mpsc::Sender<MidiMessage>, include_clock_ticks: bool, rewrite_note_zero_as_off: bool) {
@@ -163,6 +173,18 @@ impl OutputDevice {
             sender: tx,
             thread
         })
+    }
+
+    pub fn send(&self, message: MidiMessage<'static>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+        if self.thread.is_finished() {
+            //TODO self.thread.join(); // panic if thread has paniced
+            panic!("Thread finished");
+        }
+        self.sender.send(message)
+    }
+
+    pub fn clone_sender(&self) -> mpsc::Sender<MidiMessage<'static>> {
+        self.sender.clone()
     }
 
     fn write_from_queue(f: &mut fs::File, rx: mpsc::Receiver<MidiMessage>) {

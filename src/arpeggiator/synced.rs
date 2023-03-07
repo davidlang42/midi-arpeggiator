@@ -223,7 +223,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                 } else if self.pedal && u8::from(value) < 64 {
                     self.pedal = false;
                     for (_, thru_note) in self.thru_notes.drain() {
-                        self.midi_out.sender.send(MidiMessage::NoteOff(thru_note.c, thru_note.n, thru_note.v))?;
+                        self.midi_out.send(MidiMessage::NoteOff(thru_note.c, thru_note.n, thru_note.v))?;
                     }
                     if self.notes.len() > 0 {
                         // save recorded arpeggio
@@ -253,7 +253,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
             },
             MidiMessage::NoteOn(c, n, v) => {
                 if self.pedal {
-                    self.midi_out.sender.send(received)?;
+                    self.midi_out.send(received)?;
                     let d = NoteDetails::new(c, n, v, settings.fixed_velocity);
                     self.thru_notes.insert(n, d);
                     self.notes.push((Instant::now(), d));
@@ -269,7 +269,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
             },
             MidiMessage::NoteOff(_, n, _) => {
                 if self.pedal {
-                    self.midi_out.sender.send(received)?;
+                    self.midi_out.send(received)?;
                     self.thru_notes.remove(&n);
                 } else if let Some(player) = self.arpeggios.get_mut(&n) {
                     player.stop();
