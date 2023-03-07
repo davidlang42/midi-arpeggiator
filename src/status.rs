@@ -78,7 +78,7 @@ impl<const N: usize> LedStatus<N> {
         let mut data: [RGB8; N] = [RGB8::default(); N];
         if let Some(steps) = self.fixed_steps {
             for i in 0..min(data.len(), steps) {
-                data[i] = RGB8::new(32, 32, 32);
+                data[i] = RGB8::new(16, 16, 16);
             }
         }
         if self.tick < data.len() {
@@ -87,9 +87,9 @@ impl<const N: usize> LedStatus<N> {
                 Pattern::Down => data.len() - self.tick - 1
             };
             data[index] = if self.running {
-                RGB8::new(0, 16, 0)
+                RGB8::new(0, 128, 0)
             } else {
-                RGB8::new(255, 0, 0)
+                RGB8::new(128, 0, 0)
             };
         }
         self.driver.write(data.into_iter()).unwrap();
