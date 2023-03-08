@@ -115,6 +115,8 @@ pub struct MutatingHold<'a> {
     held_notes: Vec<NoteDetails>,
     changed: bool,
     arpeggio: Option<Player>,
+    pedal: bool,
+    pedal_notes_off: HashSet<Note>
 }
 
 impl<'a> MutatingHold<'a> {
@@ -123,7 +125,23 @@ impl<'a> MutatingHold<'a> {
             midi_out,
             held_notes: Vec::new(),
             changed: false,
-            arpeggio: None
+            arpeggio: None,
+            pedal: false,
+            pedal_notes_off: HashSet::new()
+        }
+    }
+
+    fn release_note(&mut self, n: Note) {
+        let mut i = 0;
+        while i < self.held_notes.len() {
+            if self.held_notes[i].n == n {
+                self.held_notes.remove(i);
+            } else {
+                i += 1;
+            }
+        }
+        if self.held_notes.len() == 0 {
+            self.changed = true; // only mutate the arp when notes are added or *all* notes are released, otherwise it mutates down to 1 step during release and the arp doesn't finish its cycle
         }
     }
 }
@@ -131,21 +149,35 @@ impl<'a> MutatingHold<'a> {
 impl<'a> Arpeggiator for MutatingHold<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
-            MidiMessage::NoteOn(c, n, v) => {
-                self.held_notes.push(NoteDetails::new(c, n, v, settings.fixed_velocity));
-                self.changed = true;
-            },
-            MidiMessage::NoteOff(_, n, _) => {
-                let mut i = 0;
-                while i < self.held_notes.len() {
-                    if self.held_notes[i].n == n {
-                        self.held_notes.remove(i);
-                    } else {
-                        i += 1;
+            MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
+                let new_pedal = u8::from(value) >= 64;
+                if self.pedal != new_pedal {
+                    self.pedal = new_pedal;
+                    if !self.pedal {
+                        // pedal released
+                        let notes_to_release: Vec<Note> = self.pedal_notes_off.drain().collect();
+                        for n in notes_to_release {
+                            self.release_note(n);
+                        }
                     }
                 }
-                if self.held_notes.len() == 0 {
-                    self.changed = true; // only mutate the arp when notes are added or *all* notes are released, otherwise it mutates down to 1 step during release and the arp doesn't finish its cycle
+            },
+            MidiMessage::NoteOn(c, n, v) => {
+                if self.pedal_notes_off.remove(&n) { // this implies self.pedal
+                    // we are re-pressing a note which isn't actually off yet, because we're holding the pedal
+                    // so we just removed it from what will be released when the pedal is released
+                } else {
+                    self.held_notes.push(NoteDetails::new(c, n, v, settings.fixed_velocity));
+                    self.changed = true;
+                }
+            },
+            MidiMessage::NoteOff(_, n, _) => {
+                if self.pedal {
+                    // if the pedal is down, we don't actually release the note, just add it to a list
+                    // when the pedal is released, all the notes in the list get "released"
+                    self.pedal_notes_off.insert(n);
+                } else {
+                    self.release_note(n);
                 }
             },
             MidiMessage::TimingClock => {
