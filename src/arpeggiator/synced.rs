@@ -13,6 +13,8 @@ use super::Arpeggiator;
 pub struct PressHold<'a> {
     midi_out: &'a midi::OutputDevice,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
+    pedal_notes_off: HashSet<Note>,
+    pedal: bool,
     arpeggios: Vec<(HashSet<Note>, Player)>
 }
 
@@ -23,7 +25,18 @@ impl<'a> PressHold<'a> {
         Self {
             midi_out,
             held_notes: HashMap::new(),
+            pedal: false,
+            pedal_notes_off: HashSet::new(),
             arpeggios: Vec::new()
+        }
+    }
+
+    fn release_note(&mut self, n: Note) {
+        self.held_notes.remove(&n);
+        for (note_set, player) in self.arpeggios.iter_mut() {
+            if note_set.remove(&n) && note_set.len() == 0 {
+                player.stop();
+            }
         }
     }
 }
@@ -31,15 +44,34 @@ impl<'a> PressHold<'a> {
 impl<'a> Arpeggiator for PressHold<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
+            MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
+                let new_pedal = u8::from(value) >= 64;
+                if self.pedal != new_pedal {
+                    self.pedal = new_pedal;
+                    if !self.pedal {
+                        // pedal released
+                        let notes_to_release: Vec<Note> = self.pedal_notes_off.drain().collect();
+                        for n in notes_to_release {
+                            self.release_note(n);
+                        }
+                    }
+                }
+            },
             MidiMessage::NoteOn(c, n, v) => {
-                self.held_notes.insert(n, (Instant::now(), NoteDetails::new(c, n, v, settings.fixed_velocity)));
+                if self.pedal_notes_off.remove(&n) { // this implies self.pedal
+                    // we are re-pressing a note which isn't actually off yet, because we're holding the pedal
+                    // so we just removed it from what will be released when the pedal is released
+                } else {
+                    self.held_notes.insert(n, (Instant::now(), NoteDetails::new(c, n, v, settings.fixed_velocity)));
+                }
             },
             MidiMessage::NoteOff(_, n, _) => {
-                self.held_notes.remove(&n);
-                for (note_set, player) in self.arpeggios.iter_mut() {
-                    if note_set.remove(&n) && note_set.len() == 0 {
-                        player.stop();
-                    }
+                if self.pedal {
+                    // if the pedal is down, we don't actually release the note, just add it to a list
+                    // when the pedal is released, all the notes in the list get "released"
+                    self.pedal_notes_off.insert(n);
+                } else {
+                    self.release_note(n);
                 }
             },
             MidiMessage::TimingClock => {
