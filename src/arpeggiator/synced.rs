@@ -1,4 +1,4 @@
-use wmidi::{Note, MidiMessage, ControlFunction};
+use wmidi::{Note, MidiMessage, ControlFunction, Channel, U7};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::mem;
@@ -260,6 +260,21 @@ pub struct PedalRecorder<'a> {
 
 impl<'a> PedalRecorder<'a> {
     pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
+        let initial_notes = vec![
+            Note::E6,
+            Note::D6,
+            Note::C6,
+            Note::D6,
+            Note::C6,
+            Note::B5,
+            Note::C6,
+            Note::B5,
+            Note::A5,
+            Note::G5
+        ];
+        let steps: Vec<Step> = initial_notes.into_iter().map(|n| Step::note(NoteDetails { c: Channel::Ch1, n, v: U7::from_u8_lossy(64) })).collect();
+        let total_beats = steps.len();
+        let arpeggio = Arpeggio::from(steps, total_beats, true);
         Self {
             midi_out,
             notes: Vec::new(),
@@ -267,7 +282,7 @@ impl<'a> PedalRecorder<'a> {
             ticks_since_last_note: 0,
             pedal: false,
             arpeggios: HashMap::new(),
-            recorded: None
+            recorded: Some(arpeggio)
         }
     }
 }
