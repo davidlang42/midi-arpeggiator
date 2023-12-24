@@ -1,5 +1,5 @@
 # Hardware setup
-A useful way to use midi-patch-changer is running on a Raspberry Pi with a small touch screen.
+A useful way to use midi-arpeggiator is running on a Raspberry Pi with a small strip of LEDs.
 The following instructions describe how I set it up, which worked successfully for me but otherwise comes with no guarentees or support.
 
 ## Parts required
