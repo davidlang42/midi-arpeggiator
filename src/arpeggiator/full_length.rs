@@ -1,5 +1,6 @@
 use wmidi::MidiMessage;
 use std::error::Error;
+use std::mem;
 use crate::midi;
 use crate::arpeggio::full_length::{Arpeggio, Player};
 use crate::settings::Settings;
@@ -32,14 +33,14 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(_, n, _) => {
-                match &self.arpeggio {
+                match &mut self.arpeggio {
                     State::Playing(player) => player.note_on(n),
                     State::Starting(arp, _) => arp.note_on(n),
                     State::None => self.arpeggio = State::Starting(Arpeggio::from(n), START_THRESHOLD_TICKS)
                 };
             },
             MidiMessage::NoteOff(_, n, _) => {
-                match &self.arpeggio {
+                match &mut self.arpeggio {
                     State::Playing(player) => player.note_off(n),
                     State::Starting(arp, _) => arp.note_off(n),
                     State::None => { }
@@ -71,10 +72,16 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
                             self.arpeggio = State::None;
                         }
                     },
-                    State::Starting(arp, 0) => {
-                        self.arpeggio = State::Playing(Player::init(arp, self.midi_out));
+                    State::Starting(_, 0) => {
+                        let mut temp = State::None;
+                        mem::swap(&mut self.arpeggio, &mut temp);
+                        if let State::Starting(arp, _) = temp {
+                            self.arpeggio = State::Playing(Player::init(arp, self.midi_out));
+                        } else {
+                            panic!()
+                        }
                     },
-                    State::Starting(arp, n) => {
+                    State::Starting(_, n) => {
                         *n -= 1;
                     },
                     State::None => { }
