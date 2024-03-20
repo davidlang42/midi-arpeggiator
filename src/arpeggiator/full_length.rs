@@ -27,7 +27,7 @@ impl<'a> EvenMutator<'a> {
     }
 }
 
-const START_THRESHOLD_TICKS: u8 = 4;
+const START_THRESHOLD_TICKS: u8 = 2;
 
 impl<'a> Arpeggiator for EvenMutator<'a> {
     fn process(&mut self, received: MidiMessage<'static>, _settings: &Settings, _status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
