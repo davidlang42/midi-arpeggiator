@@ -1,4 +1,4 @@
-use wmidi::MidiMessage;
+use wmidi::{MidiMessage, U7};
 use std::error::Error;
 use std::mem;
 use crate::midi;
@@ -32,11 +32,16 @@ const START_THRESHOLD_TICKS: u8 = 2;
 impl<'a> Arpeggiator for EvenMutator<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, _status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
-            MidiMessage::NoteOn(_, n, _) => {
+            MidiMessage::NoteOn(_, n, actual_v) => {
+                let v = if let Some(fixed_v) = settings.fixed_velocity {
+                    U7::from_u8_lossy(fixed_v)
+                } else {
+                    actual_v
+                };
                 match &mut self.arpeggio {
-                    State::Playing(player) => player.note_on(n),
-                    State::Starting(arp, _) => arp.note_on(n),
-                    State::None => self.arpeggio = State::Starting(Arpeggio::from(n, settings.fixed_steps.unwrap_or(1)), START_THRESHOLD_TICKS)
+                    State::Playing(player) => player.note_on(n, v),
+                    State::Starting(arp, _) => arp.note_on(n, v),
+                    State::None => self.arpeggio = State::Starting(Arpeggio::from(n, v, settings.fixed_steps.unwrap_or(1)), START_THRESHOLD_TICKS)
                 };
             },
             MidiMessage::NoteOff(_, n, _) => {

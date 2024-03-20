@@ -1,19 +1,19 @@
 use std::{sync::mpsc, error::Error};
 use std::fmt;
-use wmidi::{Channel, MidiMessage, Note, U7};
+use wmidi::{Channel, MidiMessage, Note, Velocity, U7};
 use crate::midi::{self, TICKS_PER_BEAT};
 
 const NOTE_MAX: usize = 127;
 
 pub struct Arpeggio {
-    notes: [bool; NOTE_MAX],
+    notes: [Option<Velocity>; NOTE_MAX],
     ticks_per_step: usize
 }
 
 impl fmt::Display for Arpeggio {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for i in 0..NOTE_MAX {
-            if self.notes[i] {
+            if self.notes[i].is_some() {
                 write!(f, "{} ", Note::from_u8_lossy(i as u8))?;
             }
         }
@@ -22,21 +22,21 @@ impl fmt::Display for Arpeggio {
 }
 
 impl Arpeggio {
-    pub fn from(note: Note, notes_per_beat: usize) -> Self {
+    pub fn from(n: Note, v: Velocity, notes_per_beat: usize) -> Self {
         let mut arp = Self {
-            notes: [false; NOTE_MAX],
+            notes: [None; NOTE_MAX],
             ticks_per_step: TICKS_PER_BEAT / notes_per_beat
         };
-        arp.note_on(note);
+        arp.note_on(n, v);
         arp
     }
 
-    pub fn note_on(&mut self, note: Note) {
-        self.notes[note as u8 as usize] = true;
+    pub fn note_on(&mut self, n: Note, v: Velocity) {
+        self.notes[n as u8 as usize] = Some(v);
     }
 
-    pub fn note_off(&mut self, note: Note) {
-        self.notes[note as u8 as usize] = false;
+    pub fn note_off(&mut self, n: Note) {
+        self.notes[n as u8 as usize] = None;
     }
 }
 
@@ -59,12 +59,12 @@ impl Player {
         }
     }
 
-    pub fn note_on(&mut self, note: Note) {
-        self.arpeggio.note_on(note)
+    pub fn note_on(&mut self, n: Note, v: Velocity) {
+        self.arpeggio.note_on(n, v)
     }
 
-    pub fn note_off(&mut self, note: Note) {
-        self.arpeggio.note_off(note)
+    pub fn note_off(&mut self, n: Note) {
+        self.arpeggio.note_off(n)
     }
 
     pub fn play_tick(&mut self) -> Result<bool, mpsc::SendError<MidiMessage<'static>>>  {
@@ -80,16 +80,18 @@ impl Player {
                 } else {
                     next_note + 1
                 };
-                if self.arpeggio.notes[next_note] {
-                    break; // found the next note
+                if let Some(v) = &self.arpeggio.notes[next_note] {
+                    // found the next note
+                    self.last_note_off()?;
+                    self.next_note_on(next_note, *v)?;
+                    break;
                 }
                 if next_note == self.last_note {
+                    // no notes are on
                     self.last_note_off()?;
-                    return Ok(false); // no notes are on
+                    return Ok(false);
                 }
             }
-            self.last_note_off()?;
-            self.next_note_on(next_note)?;
             self.wait_ticks = self.arpeggio.ticks_per_step;
         }
         self.wait_ticks -= 1;
@@ -101,9 +103,9 @@ impl Player {
         self.midi_out.send(message)
     }
 
-    fn next_note_on(&mut self, next_note: usize) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+    fn next_note_on(&mut self, next_note: usize, v: Velocity) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         self.last_note = next_note;
-        let message = MidiMessage::NoteOn(Channel::Ch1, Note::from_u8_lossy(next_note as u8), U7::from_u8_lossy(100));
+        let message = MidiMessage::NoteOn(Channel::Ch1, Note::from_u8_lossy(next_note as u8), v);
         self.midi_out.send(message)
     }
 
