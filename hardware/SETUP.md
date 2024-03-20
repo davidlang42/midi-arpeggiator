@@ -46,7 +46,7 @@ The following instructions describe how I set it up, which worked successfully f
 3. Install rust `curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | sh`
 4. Configure other WiFi networks if required `sudo nano /etc/wpa_supplicant/wpa_supplicant.conf`
 5. Disconnect & reconnect to SSH
-6. Install git `sudo apt update && sudo apt upgrade && sudo install git`
+6. Install git `sudo apt update && sudo apt upgrade && sudo apt install git`
 7. In order to get `clang-sys` rust library to build on RPi, run the following:
 - `sudo apt-get install llvm clang`
 - `sudo ln -s /usr/lib/arm-linux-gnueabihf/libclang-11.so.1 /usr/lib/libclang.so`
