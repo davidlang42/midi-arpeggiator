@@ -31,7 +31,7 @@ impl Arpeggio {
     pub fn from(note: Note) -> Self {
         let mut arp = Self {
             notes: [false; NOTE_MAX],
-            ticks_per_step: TICKS_PER_BEAT / 16 // semiquavers
+            ticks_per_step: TICKS_PER_BEAT / 4 // semiquavers
         };
         arp.note_on(note);
         arp
@@ -58,7 +58,7 @@ impl Player {
     pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice) -> Self {
         Self {
             arpeggio,
-            last_note: NOTE_MAX,
+            last_note: NOTE_MAX - 1,
             wait_ticks: 0,
             should_stop: false,
             midi_out: midi_out.clone_sender()
@@ -81,7 +81,7 @@ impl Player {
         if self.wait_ticks == 0 {
             let mut next_note = self.last_note;
             loop {
-                next_note = if next_note == NOTE_MAX {
+                next_note = if next_note == NOTE_MAX - 1 {
                     0
                 } else {
                     next_note + 1
@@ -90,6 +90,7 @@ impl Player {
                     break; // found the next note
                 }
                 if next_note == self.last_note {
+                    self.last_note_off()?;
                     return Ok(false); // no notes are on
                 }
             }
@@ -102,7 +103,7 @@ impl Player {
     }
 
     fn last_note_off(&self) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
-        let message = MidiMessage::NoteOn(Channel::Ch1, Note::from_u8_lossy(self.last_note as u8), U7::from_u8_lossy(100));
+        let message = MidiMessage::NoteOff(Channel::Ch1, Note::from_u8_lossy(self.last_note as u8), U7::from_u8_lossy(100));
         self.midi_out.send(message)
     }
 
