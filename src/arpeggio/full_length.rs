@@ -54,12 +54,6 @@ pub struct Player {
     pub should_stop: bool
 }
 
-enum OptionIndex<T> {
-    None,
-    Some(T),
-    SomeIndex(usize)
-}
-
 impl Player {
     pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice) -> Self {
         Self {
@@ -118,7 +112,7 @@ impl Player {
         self.midi_out.send(message)
     }
 
-    pub fn stop(&mut self) {
+    pub fn _stop(&mut self) {
         self.should_stop = true;
     }
 
