@@ -109,13 +109,13 @@ impl Player {
         self.midi_out.send(message)
     }
 
-    pub fn _stop(&mut self) {
+    pub fn stop(&mut self) {
         self.should_stop = true;
     }
 
     pub fn force_stop(&mut self) -> Result<(), Box<dyn Error>> {
+        self.stop();
         self.wait_ticks = 0;
-        self.should_stop = true;
         if self.play_tick()? {
             Err(format!("Failed to force stop arpeggio").into())
         } else {
