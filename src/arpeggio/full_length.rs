@@ -12,18 +12,12 @@ pub struct Arpeggio {
 
 impl fmt::Display for Arpeggio {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        //TODO
-        // match self.steps.len() {
-        //     0 => write!(f, "-")?,
-        //     len => {
-        //         write!(f, "{}", self.steps[0])?;
-        //         for i in 1..len {
-        //             write!(f, ",{}", self.steps[i])?;
-        //         }
-        //     }
-        // }
-        // write!(f, "@{}ticks/step", self.ticks_per_step)
-        write!(f, "TODO")
+        for i in 0..NOTE_MAX {
+            if self.notes[i] {
+                write!(f, "{} ", Note::from_u8_lossy(i as u8))?;
+            }
+        }
+        write!(f, "@{}ticks/step", self.ticks_per_step)
     }
 }
 
