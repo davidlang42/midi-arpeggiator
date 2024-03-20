@@ -62,7 +62,7 @@ pub struct LedStatus<const N: usize> {
 }
 
 impl<const N: usize> LedStatus<N> {
-    pub fn _new(pin: u8) -> Self {
+    pub fn new(pin: u8) -> Self {
         let mut status = Self {
             driver: Ws2812Rpi::new(N as i32, pin as i32).unwrap(),
             tick: 0,
