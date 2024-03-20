@@ -30,7 +30,7 @@ impl<'a> EvenMutator<'a> {
 const START_THRESHOLD_TICKS: u8 = 2;
 
 impl<'a> Arpeggiator for EvenMutator<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, _status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(_, n, actual_v) => {
                 let v = if let Some(fixed_v) = settings.fixed_velocity {
@@ -52,25 +52,6 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
                 };
             },
             MidiMessage::TimingClock => {
-                //TODO whatever this is?
-                // if self.changed && (self.arpeggio.is_none() || !self.arpeggio.as_ref().unwrap().should_stop) { // don't process new notes the arp is already stopping
-                //     self.changed = false;
-                //     if self.held_notes.len() == 0 {
-                //         if let Some(existing) = &mut self.arpeggio {
-                //             existing.stop();
-                //         }
-                //     } else {
-                //         let steps: Vec<Step> = self.held_notes.iter().map(|n| Step::note(*n)).collect();
-                //         let steps_len = steps.len();
-                //         let arp = Arpeggio::from(steps, steps_len, settings.finish_pattern);
-                //         if let Some(existing) = &mut self.arpeggio {
-                //             existing.change_arpeggio(arp)?;
-                //         } else {
-                //             self.arpeggio = Some(Player::init(arp, &self.midi_out));
-                //             status.reset_beat();
-                //         }
-                //     }
-                // }
                 match &mut self.arpeggio {
                     State::Playing(player) => {
                         if !player.play_tick()? {
@@ -81,10 +62,16 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
                         let mut temp = State::None;
                         mem::swap(&mut self.arpeggio, &mut temp);
                         if let State::Starting(arp, _) = temp {
-                            self.arpeggio = State::Playing(Player::init(arp, self.midi_out));
+                            let mut player = Player::init(arp, self.midi_out);
+                            self.arpeggio = if player.play_tick()? {
+                                State::Playing(player)
+                            } else {
+                                State::None
+                            };
                         } else {
                             panic!()
                         }
+                        status.reset_beat();
                     },
                     State::Starting(_, n) => {
                         *n -= 1;
