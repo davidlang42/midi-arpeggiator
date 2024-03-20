@@ -22,10 +22,10 @@ impl fmt::Display for Arpeggio {
 }
 
 impl Arpeggio {
-    pub fn from(note: Note) -> Self {
+    pub fn from(note: Note, notes_per_beat: usize) -> Self {
         let mut arp = Self {
             notes: [false; NOTE_MAX],
-            ticks_per_step: TICKS_PER_BEAT / 4 // semiquavers
+            ticks_per_step: TICKS_PER_BEAT / notes_per_beat
         };
         arp.note_on(note);
         arp
@@ -97,7 +97,7 @@ impl Player {
     }
 
     fn last_note_off(&self) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
-        let message = MidiMessage::NoteOff(Channel::Ch1, Note::from_u8_lossy(self.last_note as u8), U7::from_u8_lossy(100));
+        let message = MidiMessage::NoteOff(Channel::Ch1, Note::from_u8_lossy(self.last_note as u8), U7::MIN);
         self.midi_out.send(message)
     }
 

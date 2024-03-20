@@ -30,13 +30,13 @@ impl<'a> EvenMutator<'a> {
 const START_THRESHOLD_TICKS: u8 = 2;
 
 impl<'a> Arpeggiator for EvenMutator<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, _settings: &Settings, _status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, _status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::NoteOn(_, n, _) => {
                 match &mut self.arpeggio {
                     State::Playing(player) => player.note_on(n),
                     State::Starting(arp, _) => arp.note_on(n),
-                    State::None => self.arpeggio = State::Starting(Arpeggio::from(n), START_THRESHOLD_TICKS)
+                    State::None => self.arpeggio = State::Starting(Arpeggio::from(n, settings.fixed_steps.unwrap_or(1)), START_THRESHOLD_TICKS)
                 };
             },
             MidiMessage::NoteOff(_, n, _) => {
