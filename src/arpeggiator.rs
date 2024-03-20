@@ -10,6 +10,7 @@ use crate::settings::{Settings, SettingsGetter};
 
 pub mod timed;
 pub mod synced;
+pub mod full_length;
 
 #[derive(Copy, Clone, EnumIter, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Pattern {
@@ -78,7 +79,8 @@ pub enum ArpeggiatorMode {
     TimedPedalRecorder,
     PressHold,
     MutatingHold,
-    SyncedPedalRecorder
+    SyncedPedalRecorder,
+    EvenMutator
 }
 
 impl ArpeggiatorMode {
@@ -88,7 +90,8 @@ impl ArpeggiatorMode {
             Self::PressHold => Box::new(synced::PressHold::new(midi_out)),
             Self::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out)),
             Self::RepeatRecorder => Box::new(timed::RepeatRecorder::new(midi_out)),
-            Self::SyncedPedalRecorder => Box::new(synced::PedalRecorder::new(midi_out))
+            Self::SyncedPedalRecorder => Box::new(synced::PedalRecorder::new(midi_out)),
+            Self::EvenMutator => Box::new(full_length::EvenMutator::new(midi_out))
         }
     }
 }
