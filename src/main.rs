@@ -4,7 +4,7 @@ use std::error::Error;
 use arpeggiator::MultiArpeggiator;
 use settings::{PredefinedProgramChanges, Settings};
 use midi::{InputDevice, OutputDevice, ClockDevice};
-use status::LedStatus;
+use status::TextStatus;
 
 mod midi;
 mod arpeggio;
@@ -35,7 +35,7 @@ fn run(midi_in: &str, midi_out: &str, predefined: Vec<Settings>) -> Result<(), B
         midi_in: InputDevice::open_with_external_clock(&midi_in, &midi_out)?,
         midi_out: OutputDevice::open(&midi_out)?,
         settings: PredefinedProgramChanges::new(predefined),
-        status: LedStatus::<8>::new(18)
+        status: TextStatus::_new(std::io::stdout())
     }.listen()
 }
 
