@@ -60,13 +60,16 @@ impl InputDevice {
         })
     }
 
-    pub fn read(&mut self) -> Result<MidiMessage<'static>, mpsc::RecvError> {
+    pub fn read(&mut self) -> Result<MidiMessage<'static>, Box<dyn Error>> {
         for thread in &self.threads {
             if thread.is_finished() {
-                panic!("InputDevice thread finished");
+                // this needs to be an error, because self.receiver can be receiving from multiple senders,
+                // and we need to consider this device as finished if either source disconnects
+                return Err("Input thread has finished".into());
             }
         }
-        self.receiver.recv()
+        let message = self.receiver.recv()?;
+        Ok(message)
     }
 
     fn read_into_queue(f: &mut fs::File, tx: mpsc::Sender<MidiMessage>, include_clock_ticks: bool, rewrite_note_zero_as_off: bool) {
@@ -81,15 +84,15 @@ impl InputDevice {
                 },
                 Ok(MidiMessage::NoteOn(c, n, U7::MIN)) if rewrite_note_zero_as_off => {
                     // some keyboards send NoteOn(velocity: 0) instead of NoteOff (eg. Kaysound MK-4902)
-                    if tx.send(MidiMessage::NoteOff(c, n, U7::MIN)).is_err() {
-                        panic!("Error rewriting NoteOn(0) as NoteOff to queue.");
+                    if let Err(e) = tx.send(MidiMessage::NoteOff(c, n, U7::MIN)) {
+                        panic!("Error rewriting NoteOn(0) as NoteOff to input queue: {}", e);
                     }
                     bytes.clear();
                 },
                 Ok(message) => {
                     // message complete, send to queue
-                    if tx.send(message.to_owned()).is_err() {
-                        panic!("Error sending to queue.");
+                    if let Err(e) = tx.send(message.to_owned()) {
+                        panic!("Error sending to input queue: {}", e);
                     }
                     bytes.clear();
                 },
@@ -102,7 +105,7 @@ impl InputDevice {
                 }
             }
         }
-        panic!("Input device has disconnected.");
+        println!("Input device has disconnected");
     }
 }
 
@@ -154,12 +157,12 @@ impl ClockDevice {
         while f.read_exact(&mut buf).is_ok() {
             if buf[0] == Self::MIDI_TICK {
                 // tick detected, send to queue
-                if tx.send(MidiMessage::TimingClock).is_err() {
-                    panic!("Error sending to queue.");
+                if let Err(e) = tx.send(MidiMessage::TimingClock) {
+                    panic!("Error sending clock to queue: {}", e);
                 }
             }
         }
-        panic!("Clock device has disconnected.");
+        println!("Clock device has disconnected");
     }
 }
 
@@ -176,7 +179,7 @@ impl OutputDevice {
 
     pub fn send(&self, message: MidiMessage<'static>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         if self.thread.is_finished() {
-            panic!("OutputDevice thread finished");
+            println!("Output thread has finished");
         }
         self.sender.send(message)
     }
@@ -195,13 +198,13 @@ impl OutputDevice {
                 Err(_) => panic!("Error writing midi message: Too many bytes (expected {}).", expected),
                 _ => {}
             }
-            if f.write_all(&buf).is_err() {
-                panic!("Error writing to device.")
+            if let Err(e) = f.write_all(&buf) {
+                panic!("Error writing to output device: {}", e);
             }
-            if f.flush().is_err() {
-                panic!("Error flushing to device.");
+            if let Err(e) = f.flush() {
+                panic!("Error flushing output device: {}", e);
             }
         }
-        panic!("Writing from queue has finished.");
+        println!("Output device has disconnected");
     }
 }

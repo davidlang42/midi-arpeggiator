@@ -98,14 +98,14 @@ impl ArpeggiatorMode {
     }
 }
 
-pub struct MultiArpeggiator<SG: SettingsGetter, SS: StatusSignal> {
+pub struct MultiArpeggiator<'a, SG: SettingsGetter, SS: StatusSignal> {
     pub midi_in: InputDevice,
     pub midi_out: OutputDevice,
     pub settings: SG,
-    pub status: SS
+    pub status: &'a mut SS
 }
 
-impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
+impl<'a, SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<'a, SG, SS> {
     pub fn listen(self) -> Result<(), Box<dyn Error>> {
         self.listen_with_midi_receivers(Vec::new())
     }
@@ -137,7 +137,7 @@ impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
             m = self.status.passthrough_midi(m.unwrap());
             // process message in arp
             if m.is_none() { continue; }
-            current.process(m.unwrap(), self.settings.get(), &mut self.status)?;
+            current.process(m.unwrap(), self.settings.get(), self.status)?;
             self.status.update_count(current.count_arpeggios());
         }
     }

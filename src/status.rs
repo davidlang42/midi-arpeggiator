@@ -13,12 +13,23 @@ pub trait StatusSignal: MidiReceiver {
     fn update_settings(&mut self, settings: &Settings);
     fn update_count(&mut self, arpeggios: usize);
     fn reset_beat(&mut self);
+    fn waiting_for_midi_connect(&mut self);
+    fn waiting_for_midi_disconnect(&mut self);
+    fn waiting_for_midi_clock(&mut self);
 }
 
 pub struct TextStatus<W: Write> {
     count: Option<usize>,
     settings: Option<Settings>,
+    waiting: Option<WaitFor>,
     writer: W
+}
+
+#[derive(Copy, Clone, PartialEq)]
+enum WaitFor {
+    Connect,
+    Disconnect,
+    Clock
 }
 
 impl<W: Write> TextStatus<W> {
@@ -26,8 +37,27 @@ impl<W: Write> TextStatus<W> {
         Self {
             count: None,
             settings: None,
+            waiting: None,
             writer
         }
+    }
+
+    fn show_wait(&mut self, wait_for: WaitFor) {
+        if let Some(already) = self.waiting {
+            if already == wait_for {
+                return;
+            }
+        }
+        match wait_for {
+            WaitFor::Connect => println!("Waiting for MIDI devices to connect"),
+            WaitFor::Disconnect => println!("Waiting for MIDI devices to disconnect"),
+            WaitFor::Clock => println!("Waiting for MIDI devices to send clock ticks")
+        }
+        self.waiting = Some(wait_for);
+    }
+
+    fn clear_wait(&mut self) {
+        self.waiting = None;
     }
 }
 
@@ -35,6 +65,7 @@ impl<W: Write> MidiReceiver for TextStatus<W> { }
 
 impl<W: Write> StatusSignal for TextStatus<W> {
     fn update_settings(&mut self, settings: &Settings) {
+        self.clear_wait();
         if self.settings.is_none() || self.settings.as_ref().unwrap() != settings {
             self.settings = Some(settings.clone());
             writeln!(self.writer, "{:?}", self.settings.as_ref().unwrap()).unwrap();
@@ -51,6 +82,18 @@ impl<W: Write> StatusSignal for TextStatus<W> {
     fn reset_beat(&mut self) {
         writeln!(self.writer, "**Reset beat**").unwrap();
     }
+    
+    fn waiting_for_midi_connect(&mut self) {
+        self.show_wait(WaitFor::Connect);
+    }
+    
+    fn waiting_for_midi_disconnect(&mut self) {
+        self.show_wait(WaitFor::Disconnect);
+    }
+    
+    fn waiting_for_midi_clock(&mut self) {
+        self.show_wait(WaitFor::Clock);
+    }
 }
 
 pub struct LedStatus<const N: usize> {
@@ -58,7 +101,8 @@ pub struct LedStatus<const N: usize> {
     tick: usize,
     running: bool, // runs green if true, red if false
     fixed_steps: Option<usize>, // bar graph from 0 in white
-    pattern: Option<Pattern> // sets run direction
+    pattern: Option<Pattern>, // sets run direction
+    waiting: Option<(WaitFor, usize)>
 }
 
 impl<const N: usize> LedStatus<N> {
@@ -68,7 +112,8 @@ impl<const N: usize> LedStatus<N> {
             tick: 0,
             running: false,
             fixed_steps: None,
-            pattern: None
+            pattern: None,
+            waiting: None
         };
         status.update_leds();
         status
@@ -102,6 +147,30 @@ impl<const N: usize> LedStatus<N> {
         }
         self.driver.write(data.into_iter()).unwrap();
     }
+
+    fn show_wait(&mut self, wait_for: WaitFor) {
+        let new_index = match self.waiting {
+            None => 0,
+            Some((different, _)) if different != wait_for => 0,
+            Some((_same, c)) if c == N - 1 => 0,
+            Some((_same, c)) => c + 1
+        };
+        let new_color = match wait_for {
+            WaitFor::Connect => RGB8::new(0, 64, 0),
+            WaitFor::Disconnect => RGB8::new(64, 0, 0),
+            WaitFor::Clock => RGB8::new(64, 64, 0)
+        };
+        let mut data: [RGB8; N] = [RGB8::default(); N];
+        for i in 0..(new_index + 1) {
+            data[i] = new_color;
+        }
+        self.driver.write(data.into_iter()).unwrap();
+        self.waiting = Some((wait_for, new_index));
+    }
+
+    fn clear_wait(&mut self) {
+        self.waiting = None;
+    }
 }
 
 impl<const N: usize> MidiReceiver for LedStatus<N> {
@@ -120,6 +189,7 @@ impl<const N: usize> MidiReceiver for LedStatus<N> {
 
 impl<const N: usize> StatusSignal for LedStatus<N> {
     fn update_settings(&mut self, settings: &Settings) {
+        self.clear_wait();
         if settings.mode == ArpeggiatorMode::Passthrough {
             self.fixed_steps = None;
             self.pattern = None;
@@ -135,5 +205,17 @@ impl<const N: usize> StatusSignal for LedStatus<N> {
 
     fn reset_beat(&mut self) {
         self.tick = 0;
+    }
+    
+    fn waiting_for_midi_connect(&mut self) {
+        self.show_wait(WaitFor::Connect);
+    }
+    
+    fn waiting_for_midi_disconnect(&mut self) {
+        self.show_wait(WaitFor::Disconnect);
+    }
+    
+    fn waiting_for_midi_clock(&mut self) {
+        self.show_wait(WaitFor::Clock);
     }
 }
