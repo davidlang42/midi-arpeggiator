@@ -4,6 +4,7 @@ use wmidi::{Note, MidiMessage, Velocity, Channel};
 
 pub mod timed;
 pub mod synced;
+pub mod full_length;
 
 #[derive(Copy, Clone)]
 pub struct NoteDetails {
