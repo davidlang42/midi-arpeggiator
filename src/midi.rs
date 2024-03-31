@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::process::Output;
 use std::sync::mpsc;
 use std::fs;
 use std::thread;
@@ -7,11 +6,9 @@ use std::io::{Read, Write};
 use std::error::Error;
 use std::thread::JoinHandle;
 use std::time::Duration;
-use wmidi::Channel;
 use wmidi::FromBytesError;
 use wmidi::MidiMessage;
 use wmidi::Note;
-use wmidi::Velocity;
 use wmidi::U7;
 use nonblock::NonBlockingReader;
 
@@ -223,18 +220,33 @@ pub struct MidiOutput {
 
 impl MidiOutput {
     pub fn send(&self, message: MidiMessage<'static>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
-        self.sender.send(message)?;
-        todo!()
-        // match message {
-        //     MidiMessage::NoteOff(c, n, v) => for i in self.doubling {
-        //         if let Some(t) = self.transpose(n, delta) {
-        //             self.midi_out.send(MidiMessage::NoteOff(c, transpose(n, , v))?;
-        //         }
-        //     },
-        //     MidiMessage::NoteOn(c, n, v) => self.note_off(c, n, v),
-        //     MidiMessage::PolyphonicKeyPressure(c, n, v) => self.key_pressure(c, n, v),
-        //     _ => {}
-        // }
-        // Ok(())
+        match message {
+            MidiMessage::NoteOff(c, n, v) => for i in &self.doubling {
+                if let Some(t) = Self::transpose(n, i) {
+                    self.sender.send(MidiMessage::NoteOff(c, t, v))?;
+                }
+            },
+            MidiMessage::NoteOn(c, n, v) => for i in &self.doubling {
+                if let Some(t) = Self::transpose(n, i) {
+                    self.sender.send(MidiMessage::NoteOn(c, t, v))?;
+                }
+            },
+            MidiMessage::PolyphonicKeyPressure(c, n, v) => for i in &self.doubling {
+                if let Some(t) = Self::transpose(n, i) {
+                    self.sender.send(MidiMessage::PolyphonicKeyPressure(c, t, v))?;
+                }
+            },
+            _ => {}
+        }
+        self.sender.send(message)
+    }
+
+    fn transpose(note: Note, delta: &i8) -> Option<Note> {
+        let transposed: isize = note as u8 as isize + *delta as isize;
+        if transposed >= 0 && transposed <= 127 {
+            Some(Note::from_u8_lossy(transposed as u8))
+        } else {
+            None
+        }
     }
 }
