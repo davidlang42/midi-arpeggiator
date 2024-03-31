@@ -60,13 +60,16 @@ impl InputDevice {
         })
     }
 
-    pub fn read(&mut self) -> Result<MidiMessage<'static>, mpsc::RecvError> {
+    pub fn read(&mut self) -> Result<MidiMessage<'static>, Box<dyn Error>> {
         for thread in &self.threads {
             if thread.is_finished() {
-                println!("Input thread has finished");
+                // this needs to be an error, because self.receiver can be receiving from multiple senders,
+                // and we need to consider this device as finished if either source disconnects
+                return Err("Input thread has finished".into());
             }
         }
-        self.receiver.recv()
+        let message = self.receiver.recv()?;
+        Ok(message)
     }
 
     fn read_into_queue(f: &mut fs::File, tx: mpsc::Sender<MidiMessage>, include_clock_ticks: bool, rewrite_note_zero_as_off: bool) {
