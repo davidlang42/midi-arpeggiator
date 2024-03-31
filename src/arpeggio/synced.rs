@@ -1,7 +1,7 @@
 use std::{sync::mpsc, error::Error};
 use std::fmt;
 use wmidi::{Note, MidiMessage};
-use crate::midi;
+use crate::midi::{self, MidiOutput};
 use super::Step;
 
 pub struct Arpeggio {
@@ -76,7 +76,7 @@ enum OptionIndex<T> {
 }
 
 impl Player {
-    pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice) -> Self {
+    pub fn init(arpeggio: Arpeggio, midi_out: Box<dyn MidiOutput>) -> Self {
         Self {
             arpeggio,
             step: 0,

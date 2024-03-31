@@ -177,13 +177,6 @@ impl OutputDevice {
         })
     }
 
-    pub fn send(&self, message: MidiMessage<'static>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
-        if self.thread.is_finished() {
-            println!("Output thread has finished");
-        }
-        self.sender.send(message)
-    }
-
     pub fn clone_sender(&self) -> mpsc::Sender<MidiMessage<'static>> {
         self.sender.clone()
     }
@@ -206,5 +199,43 @@ impl OutputDevice {
             }
         }
         println!("Output device has disconnected");
+    }
+}
+
+pub trait MidiOutput {
+    fn send(&self, message: MidiMessage<'static>) -> Result<(), mpsc::SendError<MidiMessage<'static>>>;
+}
+
+impl MidiOutput for &OutputDevice {
+    fn send(&self, message: MidiMessage<'static>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+        if self.thread.is_finished() {
+            println!("Output thread has finished");
+        }
+        self.sender.send(message)
+    }
+}
+
+pub struct DoubleOutput<'a> {
+    midi_out: &'a OutputDevice,
+    doubling: Vec<i8>
+}
+
+impl<'a> DoubleOutput<'a> {
+    pub fn new(midi_out: &'a OutputDevice, doubling: Vec<i8>) -> Self {
+        Self {
+            midi_out,
+            doubling
+        }
+    }
+}
+
+impl<'a> MidiOutput for DoubleOutput<'a> {
+    fn send(&self, message: MidiMessage<'static>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+        match message {
+            MidiMessage::NoteOff(c, n, v) => todo!(),
+            MidiMessage::NoteOn(c, n, v) => todo!(),
+            MidiMessage::PolyphonicKeyPressure(c, n, v) => todo!(),
+            _ => self.midi_out.send(message)
+        }
     }
 }

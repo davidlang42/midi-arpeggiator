@@ -4,7 +4,7 @@ use std::mem;
 use std::time::Instant;
 use wmidi::{Note, MidiMessage, ControlFunction};
 use crate::status::StatusSignal;
-use crate::midi;
+use crate::midi::{self, MidiOutput};
 use crate::arpeggio::NoteDetails;
 use crate::arpeggio::timed::{Arpeggio, Player};
 use crate::settings::Settings;
