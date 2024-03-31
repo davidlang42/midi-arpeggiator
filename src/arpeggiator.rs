@@ -75,6 +75,7 @@ pub trait Arpeggiator {
 
 #[derive(PartialEq, EnumIter, Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum ArpeggiatorMode {
+    Passthrough,
     RepeatRecorder,
     TimedPedalRecorder,
     PressHold,
@@ -86,6 +87,7 @@ pub enum ArpeggiatorMode {
 impl ArpeggiatorMode {
     fn create<'a>(&self, midi_out: &'a OutputDevice) -> Box<dyn Arpeggiator + 'a> {
         match self {
+            Self::Passthrough => Box::new(Passthrough(midi_out)),
             Self::MutatingHold => Box::new(synced::MutatingHold::new(midi_out)),
             Self::PressHold => Box::new(synced::PressHold::new(midi_out)),
             Self::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out)),
@@ -138,5 +140,22 @@ impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
             current.process(m.unwrap(), self.settings.get(), &mut self.status)?;
             self.status.update_count(current.count_arpeggios());
         }
+    }
+}
+
+struct Passthrough<'a>(&'a OutputDevice);
+
+impl<'a> Arpeggiator for Passthrough<'a> {
+    fn process(&mut self, message: MidiMessage<'static>, _settings: &Settings, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+        self.0.send(message)?;
+        Ok(())
+    }
+
+    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
+
+    fn count_arpeggios(&self) -> usize {
+        1//TODO what shoudl this look like?
     }
 }
