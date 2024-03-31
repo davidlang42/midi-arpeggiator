@@ -84,15 +84,15 @@ impl InputDevice {
                 },
                 Ok(MidiMessage::NoteOn(c, n, U7::MIN)) if rewrite_note_zero_as_off => {
                     // some keyboards send NoteOn(velocity: 0) instead of NoteOff (eg. Kaysound MK-4902)
-                    if tx.send(MidiMessage::NoteOff(c, n, U7::MIN)).is_err() {
-                        panic!("Error rewriting NoteOn(0) as NoteOff to queue.");
+                    if let Err(e) = tx.send(MidiMessage::NoteOff(c, n, U7::MIN)) {
+                        panic!("Error rewriting NoteOn(0) as NoteOff to input queue: {}", e);
                     }
                     bytes.clear();
                 },
                 Ok(message) => {
                     // message complete, send to queue
-                    if tx.send(message.to_owned()).is_err() {
-                        panic!("Error sending to queue.");
+                    if let Err(e) = tx.send(message.to_owned()) {
+                        panic!("Error sending to input queue: {}", e);
                     }
                     bytes.clear();
                 },
@@ -158,7 +158,7 @@ impl ClockDevice {
             if buf[0] == Self::MIDI_TICK {
                 // tick detected, send to queue
                 if let Err(e) = tx.send(MidiMessage::TimingClock) {
-                    println!("Error sending clock to queue: {}", e);
+                    panic!("Error sending clock to queue: {}", e);
                 }
             }
         }
@@ -199,10 +199,10 @@ impl OutputDevice {
                 _ => {}
             }
             if let Err(e) = f.write_all(&buf) {
-                println!("Error writing to output device: {}", e);
+                panic!("Error writing to output device: {}", e);
             }
             if let Err(e) = f.flush() {
-                println!("Error flushing output device: {}", e);
+                panic!("Error flushing output device: {}", e);
             }
         }
         println!("Output device has disconnected");
