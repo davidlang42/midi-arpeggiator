@@ -158,7 +158,7 @@ impl<const N: usize> LedStatus<N> {
         let new_color = match wait_for {
             WaitFor::Connect => RGB8::new(0, 64, 0),
             WaitFor::Disconnect => RGB8::new(64, 0, 0),
-            WaitFor::Clock => RGB8::new(64, 64, 0)
+            WaitFor::Clock => RGB8::new(64, 41, 0)
         };
         let mut data: [RGB8; N] = [RGB8::default(); N];
         for i in 0..(new_index + 1) {
