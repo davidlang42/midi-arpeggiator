@@ -45,7 +45,7 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
                 match &mut self.arpeggio {
                     State::Playing(player) => player.note_on(n, v),
                     State::Starting(arp, _) => arp.note_on(n, v),
-                    State::None => self.arpeggio = State::Starting(Arpeggio::from(n, v, settings.fixed_steps.unwrap_or(1)), START_THRESHOLD_TICKS)
+                    State::None => self.arpeggio = State::Starting(Arpeggio::from(n, v, settings.fixed_steps.unwrap_or(1), settings.pattern), START_THRESHOLD_TICKS)
                 };
             },
             MidiMessage::NoteOff(_, n, _) => {

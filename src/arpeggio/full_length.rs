@@ -1,13 +1,15 @@
 use std::{sync::mpsc, error::Error};
 use std::fmt;
 use wmidi::{Channel, MidiMessage, Note, Velocity, U7};
+use crate::arpeggiator::Pattern;
 use crate::midi::{self, TICKS_PER_BEAT};
 
 const NOTE_MAX: usize = 127;
 
 pub struct Arpeggio {
     notes: [Option<Velocity>; NOTE_MAX],
-    ticks_per_step: usize
+    ticks_per_step: usize,
+    pattern: Pattern
 }
 
 impl fmt::Display for Arpeggio {
@@ -22,10 +24,11 @@ impl fmt::Display for Arpeggio {
 }
 
 impl Arpeggio {
-    pub fn from(n: Note, v: Velocity, notes_per_beat: usize) -> Self {
+    pub fn from(n: Note, v: Velocity, notes_per_beat: usize, pattern: Pattern) -> Self {
         let mut arp = Self {
             notes: [None; NOTE_MAX],
-            ticks_per_step: TICKS_PER_BEAT / notes_per_beat
+            ticks_per_step: TICKS_PER_BEAT / notes_per_beat,
+            pattern
         };
         arp.note_on(n, v);
         arp
@@ -75,10 +78,17 @@ impl Player {
         if self.wait_ticks == 0 {
             let mut next_note = self.last_note;
             loop {
-                next_note = if next_note == NOTE_MAX - 1 {
-                    0
-                } else {
-                    next_note + 1
+                next_note = match self.arpeggio.pattern {
+                    Pattern::Up => if next_note == NOTE_MAX - 1 {
+                        0
+                    } else {
+                        next_note + 1
+                    },
+                    Pattern::Down => if next_note == 0 {
+                        NOTE_MAX - 1
+                    } else {
+                        next_note - 1
+                    }
                 };
                 if let Some(v) = &self.arpeggio.notes[next_note] {
                     // found the next note
