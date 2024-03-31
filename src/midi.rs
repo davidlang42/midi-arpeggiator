@@ -154,8 +154,8 @@ impl ClockDevice {
         while f.read_exact(&mut buf).is_ok() {
             if buf[0] == Self::MIDI_TICK {
                 // tick detected, send to queue
-                if tx.send(MidiMessage::TimingClock).is_err() {
-                    panic!("Error sending to queue.");
+                if let Err(e) = tx.send(MidiMessage::TimingClock) {
+                    println!("Error sending clock to queue: {}", e);
                 }
             }
         }
