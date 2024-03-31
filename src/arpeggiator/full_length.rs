@@ -29,9 +29,7 @@ impl<'a> EvenMutator<'a> {
 
 const START_THRESHOLD_TICKS: u8 = 2;
 
-// LIMITED IMPLEMENTATION, currently EvenMutator does not support
-// - sustain pedal
-// - Settings.finish_pattern
+// NOTE: EvenMutator does not support sustain pedal (but could in the future)
 impl<'a> Arpeggiator for EvenMutator<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
