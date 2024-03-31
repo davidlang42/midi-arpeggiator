@@ -1,7 +1,7 @@
 use std::cmp::min;
 use std::io::Write;
 
-use crate::arpeggiator::Pattern;
+use crate::arpeggiator::{ArpeggiatorMode, Pattern};
 use crate::settings::Settings;
 use crate::midi::{self, MidiReceiver};
 
@@ -58,7 +58,7 @@ pub struct LedStatus<const N: usize> {
     tick: usize,
     running: bool, // runs green if true, red if false
     fixed_steps: Option<usize>, // bar graph from 0 in white
-    pattern: Pattern // sets run direction
+    pattern: Option<Pattern> // sets run direction
 }
 
 impl<const N: usize> LedStatus<N> {
@@ -68,7 +68,7 @@ impl<const N: usize> LedStatus<N> {
             tick: 0,
             running: false,
             fixed_steps: None,
-            pattern: Pattern::Up
+            pattern: None
         };
         status.update_leds();
         status
@@ -81,16 +81,25 @@ impl<const N: usize> LedStatus<N> {
                 data[i] = RGB8::new(16, 16, 16);
             }
         }
-        let progress = self.tick * data.len() / midi::TICKS_PER_BEAT;
-        let index = match self.pattern {
-            Pattern::Up => progress,
-            Pattern::Down => data.len() - progress - 1
-        };
-        data[index] = if self.running {
+        let running_color = if self.running {
             RGB8::new(0, 64, 0)
         } else {
             RGB8::new(64, 0, 0)
         };
+        if let Some(pattern) = self.pattern {
+            let progress = self.tick * data.len() / midi::TICKS_PER_BEAT;
+            let index = match pattern {
+                Pattern::Up => progress,
+                Pattern::Down => data.len() - progress - 1
+            };
+            data[index] = running_color;
+        } else {
+            if self.tick < midi::TICKS_PER_BEAT / 2 {
+                for i in 0..data.len() {
+                    data[i] = running_color;
+                }
+            }
+        }
         self.driver.write(data.into_iter()).unwrap();
     }
 }
@@ -111,8 +120,13 @@ impl<const N: usize> MidiReceiver for LedStatus<N> {
 
 impl<const N: usize> StatusSignal for LedStatus<N> {
     fn update_settings(&mut self, settings: &Settings) {
-        self.fixed_steps = settings.fixed_steps;
-        self.pattern = settings.pattern;
+        if settings.mode == ArpeggiatorMode::Passthrough {
+            self.fixed_steps = None;
+            self.pattern = None;
+        } else {
+            self.fixed_steps = settings.fixed_steps;
+            self.pattern = Some(settings.pattern);
+        }
     }
 
     fn update_count(&mut self, arpeggios: usize) {
