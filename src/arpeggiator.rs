@@ -1,5 +1,5 @@
 use std::error::Error;
-use wmidi::MidiMessage;
+use wmidi::{ControlFunction, MidiMessage};
 
 use strum_macros::EnumIter;
 
@@ -145,9 +145,43 @@ impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
 
 struct Passthrough<'a>(&'a OutputDevice);
 
+impl<'a> Passthrough<'a> {
+    fn should_passthrough(message: &MidiMessage) -> bool {
+        match message {
+            // dont send patch changes
+            MidiMessage::ProgramChange(_, _) => false,
+            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT, _) => false,
+            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT_LSB, _) => false,
+            // do send notes and expression
+            MidiMessage::NoteOff(_, _, _) => true,
+            MidiMessage::NoteOn(_, _, _) => true,
+            MidiMessage::PolyphonicKeyPressure(_, _, _) => true,
+            MidiMessage::ControlChange(_, _, _) => true,
+            MidiMessage::ChannelPressure(_, _) => true,
+            MidiMessage::PitchBendChange(_, _) => true,
+            // dont send other weirdness
+            MidiMessage::SysEx(_) => false,
+            MidiMessage::OwnedSysEx(_) => false,
+            MidiMessage::MidiTimeCode(_) => false,
+            MidiMessage::SongPositionPointer(_) => false,
+            MidiMessage::SongSelect(_) => false,
+            MidiMessage::Reserved(_) => false,
+            MidiMessage::TuneRequest => false,
+            MidiMessage::TimingClock => false,
+            MidiMessage::Start => false,
+            MidiMessage::Continue => false,
+            MidiMessage::Stop => false,
+            MidiMessage::ActiveSensing => false,
+            MidiMessage::Reset => false
+        }
+    }
+}
+
 impl<'a> Arpeggiator for Passthrough<'a> {
     fn process(&mut self, message: MidiMessage<'static>, _settings: &Settings, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
-        self.0.send(message)?;
+        if Self::should_passthrough(&message) {
+            self.0.send(message)?;
+        }
         Ok(())
     }
 
@@ -156,6 +190,6 @@ impl<'a> Arpeggiator for Passthrough<'a> {
     }
 
     fn count_arpeggios(&self) -> usize {
-        1//TODO what shoudl this look like?
+        1
     }
 }
