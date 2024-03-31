@@ -186,10 +186,11 @@ impl OutputDevice {
     }
 
     pub fn with_doubling(&self, doubling: &Option<Vec<i8>>) -> MidiOutput {
-        MidiOutput {
-            sender: self.sender.clone(),
-            doubling: if let Some(d) = doubling { d.clone() } else { Vec::new() }
-        }
+        MidiOutput::new(self.sender.clone(), if let Some(d) = doubling { d.clone() } else { Vec::new() })
+    }
+
+    pub fn send_with_doubling<'a, I: Iterator<Item = &'a i8>>(&self, message: MidiMessage<'static>, doubling: I) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+        MidiOutput::send_doubles(message, &self.sender, doubling)
     }
 
     fn write_from_queue(f: &mut fs::File, rx: mpsc::Receiver<MidiMessage>) {
@@ -219,26 +220,37 @@ pub struct MidiOutput {
 }
 
 impl MidiOutput {
+    fn new(sender: mpsc::Sender<MidiMessage<'static>>, doubling: Vec<i8>) -> Self {
+        Self {
+            sender,
+            doubling
+        }
+    }
+
     pub fn send(&self, message: MidiMessage<'static>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+        Self::send_doubles(message, &self.sender, self.doubling.iter())
+    }
+
+    fn send_doubles<'a, I: Iterator<Item = &'a i8>>(message: MidiMessage<'static>, sender: &mpsc::Sender<MidiMessage<'static>>, doubling: I) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         match message {
-            MidiMessage::NoteOff(c, n, v) => for i in &self.doubling {
+            MidiMessage::NoteOff(c, n, v) => for i in doubling {
                 if let Some(t) = Self::transpose(n, i) {
-                    self.sender.send(MidiMessage::NoteOff(c, t, v))?;
+                    sender.send(MidiMessage::NoteOff(c, t, v))?;
                 }
             },
-            MidiMessage::NoteOn(c, n, v) => for i in &self.doubling {
+            MidiMessage::NoteOn(c, n, v) => for i in doubling {
                 if let Some(t) = Self::transpose(n, i) {
-                    self.sender.send(MidiMessage::NoteOn(c, t, v))?;
+                    sender.send(MidiMessage::NoteOn(c, t, v))?;
                 }
             },
-            MidiMessage::PolyphonicKeyPressure(c, n, v) => for i in &self.doubling {
+            MidiMessage::PolyphonicKeyPressure(c, n, v) => for i in doubling {
                 if let Some(t) = Self::transpose(n, i) {
-                    self.sender.send(MidiMessage::PolyphonicKeyPressure(c, t, v))?;
+                    sender.send(MidiMessage::PolyphonicKeyPressure(c, t, v))?;
                 }
             },
             _ => {}
         }
-        self.sender.send(message)
+        sender.send(message)
     }
 
     fn transpose(note: Note, delta: &i8) -> Option<Note> {

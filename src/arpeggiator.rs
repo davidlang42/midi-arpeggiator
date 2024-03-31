@@ -5,7 +5,7 @@ use strum_macros::EnumIter;
 
 use crate::arpeggio::{NoteDetails, Step};
 use crate::status::StatusSignal;
-use crate::midi::{MidiReceiver, OutputDevice, InputDevice};
+use crate::midi::{InputDevice, MidiReceiver, OutputDevice};
 use crate::settings::{Settings, SettingsGetter};
 
 pub mod timed;
@@ -87,7 +87,7 @@ pub enum ArpeggiatorMode {
 impl ArpeggiatorMode {
     fn create<'a>(&self, midi_out: &'a OutputDevice) -> Box<dyn Arpeggiator + 'a> {
         match self {
-            Self::Passthrough => Box::new(Passthrough::new(midi_out)),
+            Self::Passthrough => Box::new(Passthrough(midi_out)),
             Self::MutatingHold => Box::new(synced::MutatingHold::new(midi_out)),
             Self::PressHold => Box::new(synced::PressHold::new(midi_out)),
             Self::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out)),
@@ -143,18 +143,9 @@ impl<'a, SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<'a, SG, SS> {
     }
 }
 
-struct Passthrough<'a> {
-    midi_out: &'a OutputDevice,
-    //TODO handle doubling
-}
+struct Passthrough<'a>(&'a OutputDevice);
 
 impl<'a> Passthrough<'a> {
-    fn new(midi_out: &'a OutputDevice) -> Self {
-        Self {
-            midi_out
-        }
-    }
-    
     fn should_passthrough(message: &MidiMessage) -> bool {
         match message {
             // dont send patch changes
@@ -187,9 +178,13 @@ impl<'a> Passthrough<'a> {
 }
 
 impl<'a> Arpeggiator for Passthrough<'a> {
-    fn process(&mut self, message: MidiMessage<'static>, _settings: &Settings, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, message: MidiMessage<'static>, settings: &Settings, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         if Self::should_passthrough(&message) {
-            self.midi_out.send(message)?;
+            if let Some(doubling) = &settings.double_notes {
+                self.0.send_with_doubling(message, doubling.iter())?;
+            } else {
+                self.0.send(message)?;
+            }
         }
         Ok(())
     }
