@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::mem;
 use std::time::Instant;
-use crate::midi::{self, MidiOutput};
+use crate::midi;
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggio::synced::{Arpeggio, Player};
 use crate::settings::Settings;
@@ -111,7 +111,7 @@ impl<'a> Arpeggiator for PressHold<'a> {
 }
 
 pub struct MutatingHold<'a> {
-    midi_out: Box<dyn MidiOutput + 'a>,
+    midi_out: &'a midi::OutputDevice,
     held_notes: Vec<NoteDetails>,
     changed: bool,
     arpeggio: Option<Player>,
@@ -120,7 +120,7 @@ pub struct MutatingHold<'a> {
 }
 
 impl<'a> MutatingHold<'a> {
-    pub fn new(midi_out: Box<dyn MidiOutput>) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
         Self {
             midi_out,
             held_notes: Vec::new(),
