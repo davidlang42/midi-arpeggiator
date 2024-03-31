@@ -1,5 +1,5 @@
 use std::error::Error;
-use wmidi::MidiMessage;
+use wmidi::{ControlFunction, MidiMessage};
 
 use strum_macros::EnumIter;
 
@@ -75,6 +75,7 @@ pub trait Arpeggiator {
 
 #[derive(PartialEq, EnumIter, Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum ArpeggiatorMode {
+    Passthrough,
     RepeatRecorder,
     TimedPedalRecorder,
     PressHold,
@@ -86,6 +87,7 @@ pub enum ArpeggiatorMode {
 impl ArpeggiatorMode {
     fn create<'a>(&self, midi_out: &'a OutputDevice) -> Box<dyn Arpeggiator + 'a> {
         match self {
+            Self::Passthrough => Box::new(Passthrough(midi_out)),
             Self::MutatingHold => Box::new(synced::MutatingHold::new(midi_out)),
             Self::PressHold => Box::new(synced::PressHold::new(midi_out)),
             Self::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out)),
@@ -138,5 +140,56 @@ impl<SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<SG, SS> {
             current.process(m.unwrap(), self.settings.get(), &mut self.status)?;
             self.status.update_count(current.count_arpeggios());
         }
+    }
+}
+
+struct Passthrough<'a>(&'a OutputDevice);
+
+impl<'a> Passthrough<'a> {
+    fn should_passthrough(message: &MidiMessage) -> bool {
+        match message {
+            // dont send patch changes
+            MidiMessage::ProgramChange(_, _) => false,
+            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT, _) => false,
+            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT_LSB, _) => false,
+            // do send notes and expression
+            MidiMessage::NoteOff(_, _, _) => true,
+            MidiMessage::NoteOn(_, _, _) => true,
+            MidiMessage::PolyphonicKeyPressure(_, _, _) => true,
+            MidiMessage::ControlChange(_, _, _) => true,
+            MidiMessage::ChannelPressure(_, _) => true,
+            MidiMessage::PitchBendChange(_, _) => true,
+            // dont send other weirdness
+            MidiMessage::SysEx(_) => false,
+            MidiMessage::OwnedSysEx(_) => false,
+            MidiMessage::MidiTimeCode(_) => false,
+            MidiMessage::SongPositionPointer(_) => false,
+            MidiMessage::SongSelect(_) => false,
+            MidiMessage::Reserved(_) => false,
+            MidiMessage::TuneRequest => false,
+            MidiMessage::TimingClock => false,
+            MidiMessage::Start => false,
+            MidiMessage::Continue => false,
+            MidiMessage::Stop => false,
+            MidiMessage::ActiveSensing => false,
+            MidiMessage::Reset => false
+        }
+    }
+}
+
+impl<'a> Arpeggiator for Passthrough<'a> {
+    fn process(&mut self, message: MidiMessage<'static>, _settings: &Settings, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+        if Self::should_passthrough(&message) {
+            self.0.send(message)?;
+        }
+        Ok(())
+    }
+
+    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
+
+    fn count_arpeggios(&self) -> usize {
+        1
     }
 }
