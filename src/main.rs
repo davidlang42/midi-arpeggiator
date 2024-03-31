@@ -21,12 +21,12 @@ const DEFAULT_SETTINGS_FILE: &str = "settings.json";
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
     let settings_list = Settings::load(args.next().unwrap_or(DEFAULT_SETTINGS_FILE.to_owned()))?;
-    let status = LedStatus::<8>::new(18); //TextStatus::_new(std::io::stdout())
+    let mut status = LedStatus::<8>::new(18); //TextStatus::_new(std::io::stdout())
     if let Some(midi_in) = args.next() {
         if let Some(midi_out) = args.next() {
-            run(&midi_in, &midi_out, settings_list, status)
+            run(&midi_in, &midi_out, &settings_list, &mut status)
         } else {
-            run(&midi_in, &midi_in, settings_list, status)
+            run(&midi_in, &midi_in, &settings_list, &mut status)
         }
     } else {
         loop {
@@ -40,9 +40,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             while result.is_none() {
                 //TODO show orange count up
                 result = if ClockDevice::init(&devices[0]).is_ok() {
-                    Some(run(&devices[1], &devices[0], settings_list, status))
+                    Some(run(&devices[1], &devices[0], &settings_list, &mut status))
                 } else if ClockDevice::init(&devices[1]).is_ok() {
-                    Some(run(&devices[1], &devices[0], settings_list, status))
+                    Some(run(&devices[1], &devices[0], &settings_list, &mut status))
                 } else {
                     None
                 }
@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn run<SS: StatusSignal>(midi_in: &str, midi_out: &str, settings_list: Vec<Settings>, status: SS) -> Result<(), Box<dyn Error>> {
+fn run<SS: StatusSignal>(midi_in: &str, midi_out: &str, settings_list: &Vec<Settings>, status: &mut SS) -> Result<(), Box<dyn Error>> {
     println!("Starting arpeggiator with MIDI-IN: {}, MIDI-OUT: {}", midi_in, midi_out);
     MultiArpeggiator {
         midi_in: InputDevice::open_with_external_clock(&midi_in, &midi_out)?,
