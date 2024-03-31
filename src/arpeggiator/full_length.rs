@@ -63,7 +63,7 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
                         let mut temp = State::None;
                         mem::swap(&mut self.arpeggio, &mut temp);
                         if let State::Starting(arp, _) = temp {
-                            let mut player = Player::init(arp, self.midi_out);
+                            let mut player = Player::init(arp, self.midi_out, &settings.double_notes);
                             self.arpeggio = if player.play_tick()? {
                                 State::Playing(player)
                             } else {

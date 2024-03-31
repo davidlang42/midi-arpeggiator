@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::process::Output;
 use std::sync::mpsc;
 use std::fs;
 use std::thread;
@@ -6,8 +7,11 @@ use std::io::{Read, Write};
 use std::error::Error;
 use std::thread::JoinHandle;
 use std::time::Duration;
+use wmidi::Channel;
 use wmidi::FromBytesError;
 use wmidi::MidiMessage;
+use wmidi::Note;
+use wmidi::Velocity;
 use wmidi::U7;
 use nonblock::NonBlockingReader;
 
@@ -184,8 +188,11 @@ impl OutputDevice {
         self.sender.send(message)
     }
 
-    pub fn clone_sender(&self) -> mpsc::Sender<MidiMessage<'static>> {
-        self.sender.clone()
+    pub fn with_doubling(&self, doubling: &Option<Vec<i8>>) -> MidiOutput {
+        MidiOutput {
+            sender: self.sender.clone(),
+            doubling: if let Some(d) = doubling { d.clone() } else { Vec::new() }
+        }
     }
 
     fn write_from_queue(f: &mut fs::File, rx: mpsc::Receiver<MidiMessage>) {
@@ -206,5 +213,28 @@ impl OutputDevice {
             }
         }
         println!("Output device has disconnected");
+    }
+}
+
+pub struct MidiOutput {
+    sender: mpsc::Sender<MidiMessage<'static>>,
+    doubling: Vec<i8>
+}
+
+impl MidiOutput {
+    pub fn send(&self, message: MidiMessage<'static>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+        self.sender.send(message)?;
+        todo!()
+        // match message {
+        //     MidiMessage::NoteOff(c, n, v) => for i in self.doubling {
+        //         if let Some(t) = self.transpose(n, delta) {
+        //             self.midi_out.send(MidiMessage::NoteOff(c, transpose(n, , v))?;
+        //         }
+        //     },
+        //     MidiMessage::NoteOn(c, n, v) => self.note_off(c, n, v),
+        //     MidiMessage::PolyphonicKeyPressure(c, n, v) => self.key_pressure(c, n, v),
+        //     _ => {}
+        // }
+        // Ok(())
     }
 }

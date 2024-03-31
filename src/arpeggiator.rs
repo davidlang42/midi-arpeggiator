@@ -87,7 +87,7 @@ pub enum ArpeggiatorMode {
 impl ArpeggiatorMode {
     fn create<'a>(&self, midi_out: &'a OutputDevice) -> Box<dyn Arpeggiator + 'a> {
         match self {
-            Self::Passthrough => Box::new(Passthrough(midi_out)),
+            Self::Passthrough => Box::new(Passthrough::new(midi_out)),
             Self::MutatingHold => Box::new(synced::MutatingHold::new(midi_out)),
             Self::PressHold => Box::new(synced::PressHold::new(midi_out)),
             Self::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out)),
@@ -143,9 +143,18 @@ impl<'a, SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<'a, SG, SS> {
     }
 }
 
-struct Passthrough<'a>(&'a OutputDevice);
+struct Passthrough<'a> {
+    midi_out: &'a OutputDevice,
+    //TODO handle doubling
+}
 
 impl<'a> Passthrough<'a> {
+    fn new(midi_out: &'a OutputDevice) -> Self {
+        Self {
+            midi_out
+        }
+    }
+    
     fn should_passthrough(message: &MidiMessage) -> bool {
         match message {
             // dont send patch changes
@@ -180,7 +189,7 @@ impl<'a> Passthrough<'a> {
 impl<'a> Arpeggiator for Passthrough<'a> {
     fn process(&mut self, message: MidiMessage<'static>, _settings: &Settings, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         if Self::should_passthrough(&message) {
-            self.0.send(message)?;
+            self.midi_out.send(message)?;
         }
         Ok(())
     }

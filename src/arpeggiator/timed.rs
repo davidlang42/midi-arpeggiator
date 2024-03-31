@@ -39,7 +39,7 @@ impl<'a> Arpeggiator for RepeatRecorder<'a> {
                         notes.push((*first_i, *first));
                         notes.sort_by(|(a, _), (b, _)| a.cmp(&b));
                         let arp = Arpeggio::from(notes, finish, settings.finish_pattern);
-                        self.arpeggios.insert(n, Player::start(arp, &self.midi_out)?);
+                        self.arpeggios.insert(n, Player::start(arp, &self.midi_out, &settings.double_notes)?);
                         status.reset_beat();
                     },
                     _ => {
@@ -122,7 +122,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                         let arp = self.recorded.as_ref().unwrap();
                         let original = arp.first_note();
                         let new_arp = arp.transpose(original, original);
-                        self.arpeggios.insert(original, Player::start(new_arp, &self.midi_out)?);
+                        self.arpeggios.insert(original, Player::start(new_arp, &self.midi_out, &settings.double_notes)?);
                         status.reset_beat();
                     }
                 }
@@ -140,7 +140,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                 } else if let Some(arp) = &self.recorded {
                     let original = arp.first_note();
                     let new_arp = arp.transpose(original, n);
-                    self.arpeggios.insert(n, Player::start(new_arp, &self.midi_out)?);
+                    self.arpeggios.insert(n, Player::start(new_arp, &self.midi_out, &settings.double_notes)?);
                     status.reset_beat();
                 }
             },

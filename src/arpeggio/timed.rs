@@ -4,7 +4,7 @@ use std::sync::{mpsc, Arc, atomic::{AtomicBool, Ordering}};
 use std::thread::{self, JoinHandle};
 use std::fmt;
 use wmidi::{Note, MidiMessage};
-use crate::midi;
+use crate::midi::{self, MidiOutput};
 
 use super::{Step, NoteDetails};
 
@@ -30,7 +30,7 @@ impl fmt::Display for Arpeggio {
 }
 
 impl Arpeggio {
-    fn play(&self, midi_out: mpsc::Sender<MidiMessage<'static>>, should_stop: Arc<AtomicBool>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+    fn play(&self, midi_out: MidiOutput, should_stop: Arc<AtomicBool>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         let mut i = 0;
         while !should_stop.load(Ordering::Relaxed) || (self.finish_steps && i != 0) {
             let step = &self.steps[i].1;
@@ -96,11 +96,11 @@ pub struct Player{
 }
 
 impl Player {
-    pub fn start(arpeggio: Arpeggio, midi_out: &midi::OutputDevice) -> Result<Self, Box<dyn Error>> {
-        let sender_cloned = midi_out.clone_sender();
+    pub fn start(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, doubling: &Option<Vec<i8>>) -> Result<Self, Box<dyn Error>> {
+        let output = midi_out.with_doubling(doubling);
         let should_stop = Arc::new(AtomicBool::new(false));
         let should_stop_cloned = Arc::clone(&should_stop);
-        let thread = thread::Builder::new().name(format!("arp:{}", arpeggio)).spawn(move || arpeggio.play(sender_cloned, should_stop_cloned))?;
+        let thread = thread::Builder::new().name(format!("arp:{}", arpeggio)).spawn(move || arpeggio.play(output, should_stop_cloned))?;
         Ok(Self {
             thread,
             should_stop
