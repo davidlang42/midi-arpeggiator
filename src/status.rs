@@ -123,25 +123,24 @@ impl<const N: usize> LedStatus<N> {
         let mut data: [RGB8; N] = [RGB8::default(); N];
         if let Some(steps) = self.fixed_steps {
             for i in 0..min(data.len(), steps) {
-                data[i] = RGB8::new(16, 16, 16);
+                data[i] = RGB8::new(16, 16, 16); // white
             }
         }
-        let running_color = if self.running {
-            RGB8::new(0, 64, 0)
-        } else {
-            RGB8::new(64, 0, 0)
-        };
         if let Some(pattern) = self.pattern {
             let progress = self.tick * data.len() / midi::TICKS_PER_BEAT;
             let index = match pattern {
                 Pattern::Up => progress,
                 Pattern::Down => data.len() - progress - 1
             };
-            data[index] = running_color;
+            data[index] = if self.running {
+                RGB8::new(0, 64, 0) // green if arp running
+            } else {
+                RGB8::new(64, 0, 0) // red if arp stopped
+            };
         } else {
             if self.tick < midi::TICKS_PER_BEAT / 2 {
                 for i in 0..data.len() {
-                    data[i] = running_color;
+                    data[i] = RGB8::new(0, 0, 16); // blue for passthrough mode
                 }
             }
         }
@@ -158,7 +157,7 @@ impl<const N: usize> LedStatus<N> {
         let new_color = match wait_for {
             WaitFor::Connect => RGB8::new(0, 64, 0),
             WaitFor::Disconnect => RGB8::new(64, 0, 0),
-            WaitFor::Clock => RGB8::new(64, 64, 0)
+            WaitFor::Clock => RGB8::new(64, 41, 0)
         };
         let mut data: [RGB8; N] = [RGB8::default(); N];
         for i in 0..(new_index + 1) {
