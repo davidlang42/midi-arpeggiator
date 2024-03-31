@@ -32,26 +32,28 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             let mut devices = list_files("/dev", "midi")?;
             while devices.len() != 2 {
-                //TODO show loading if < 2, loading_error if > 2
+                if devices.len() < 2 {
+                    status.waiting_for_midi_connect();
+                } else {
+                    status.waiting_for_midi_disconnect();
+                }
                 thread::sleep(Duration::from_millis(500));
                 devices = list_files("/dev", "midi")?;
             }
-            let mut result = None;
-            while result.is_none() {
-                //TODO show orange count up
-                result = if ClockDevice::init(&devices[0]).is_ok() {
-                    Some(run(&devices[1], &devices[0], &settings_list, &mut status))
-                } else if ClockDevice::init(&devices[1]).is_ok() {
-                    Some(run(&devices[1], &devices[0], &settings_list, &mut status))
-                } else {
-                    None
-                }
-            }
-            match result.unwrap() {
-                Ok(()) => println!("Arpeggiator disconnected OK"),
-                Err(e) => println!("Arpeggiator disconnected with error: {}", e)
+            status.waiting_for_midi_clock();
+            if ClockDevice::init(&devices[0]).is_ok() {
+                run_and_print(&devices[1], &devices[0], &settings_list, &mut status);
+            } else if ClockDevice::init(&devices[1]).is_ok() {
+                run_and_print(&devices[1], &devices[0], &settings_list, &mut status);
             }
         }
+    }
+}
+
+fn run_and_print<SS: StatusSignal>(midi_in: &str, midi_out: &str, settings_list: &Vec<Settings>, status: &mut SS) {
+    match run(midi_in, midi_out, settings_list, status) {
+        Ok(()) => println!("Arpeggiator disconnected OK"),
+        Err(e) => println!("Arpeggiator disconnected with error: {}", e)
     }
 }
 
