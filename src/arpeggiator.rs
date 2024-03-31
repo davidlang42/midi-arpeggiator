@@ -5,7 +5,7 @@ use strum_macros::EnumIter;
 
 use crate::arpeggio::{NoteDetails, Step};
 use crate::status::StatusSignal;
-use crate::midi::{MidiReceiver, OutputDevice, InputDevice};
+use crate::midi::{InputDevice, MidiReceiver, OutputDevice};
 use crate::settings::{Settings, SettingsGetter};
 
 pub mod timed;
@@ -178,9 +178,13 @@ impl<'a> Passthrough<'a> {
 }
 
 impl<'a> Arpeggiator for Passthrough<'a> {
-    fn process(&mut self, message: MidiMessage<'static>, _settings: &Settings, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, message: MidiMessage<'static>, settings: &Settings, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         if Self::should_passthrough(&message) {
-            self.0.send(message)?;
+            if let Some(doubling) = &settings.double_notes {
+                self.0.send_with_doubling(message, doubling.iter())?;
+            } else {
+                self.0.send(message)?;
+            }
         }
         Ok(())
     }

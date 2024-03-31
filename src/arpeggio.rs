@@ -2,6 +2,8 @@ use std::sync::mpsc;
 use std::fmt;
 use wmidi::{Note, MidiMessage, Velocity, Channel};
 
+use crate::midi::MidiOutput;
+
 pub mod timed;
 pub mod synced;
 pub mod full_length;
@@ -48,7 +50,7 @@ impl fmt::Display for Step {
 }
 
 impl Step {
-    pub fn send_on(&self, tx: &mpsc::Sender<MidiMessage<'static>>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+    pub fn send_on(&self, tx: &MidiOutput) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         for note in &self.notes {
             let message = MidiMessage::NoteOn(note.c, note.n, note.v);
             tx.send(message)?;
@@ -56,7 +58,7 @@ impl Step {
         Ok(())
     }
 
-    pub fn send_off(&self, tx: &mpsc::Sender<MidiMessage<'static>>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+    pub fn send_off(&self, tx: &MidiOutput) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         for note in &self.notes {
             let message = MidiMessage::NoteOff(note.c, note.n, note.v);
             tx.send(message)?;

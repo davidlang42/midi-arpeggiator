@@ -2,7 +2,7 @@ use std::{sync::mpsc, error::Error};
 use std::fmt;
 use wmidi::{Channel, MidiMessage, Note, Velocity, U7};
 use crate::arpeggiator::Pattern;
-use crate::midi::{self, TICKS_PER_BEAT};
+use crate::midi::{self, MidiOutput, TICKS_PER_BEAT};
 
 const NOTE_MAX: usize = 127;
 
@@ -44,7 +44,7 @@ impl Arpeggio {
 }
 
 pub struct Player {
-    midi_out: mpsc::Sender<MidiMessage<'static>>,
+    midi_out: MidiOutput,
     arpeggio: Arpeggio,
     last_note: usize,
     wait_ticks: usize,
@@ -52,13 +52,13 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice) -> Self {
+    pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, doubling: &Option<Vec<i8>>) -> Self {
         Self {
             arpeggio,
             last_note: NOTE_MAX - 1,
             wait_ticks: 0,
             should_stop: false,
-            midi_out: midi_out.clone_sender()
+            midi_out: midi_out.with_doubling(doubling)
         }
     }
 

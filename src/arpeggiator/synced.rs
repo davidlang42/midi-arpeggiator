@@ -80,7 +80,7 @@ impl<'a> Arpeggiator for PressHold<'a> {
                     let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
                     let steps = settings.generate_steps(note_details);
                     let arp = Arpeggio::from(steps, 1, settings.finish_pattern);
-                    self.arpeggios.push((note_set, Player::init(arp, &self.midi_out)));
+                    self.arpeggios.push((note_set, Player::init(arp, &self.midi_out, &settings.double_notes)));
                     status.reset_beat();
                 }
                 let mut i = 0;
@@ -194,7 +194,7 @@ impl<'a> Arpeggiator for MutatingHold<'a> {
                         if let Some(existing) = &mut self.arpeggio {
                             existing.change_arpeggio(arp)?;
                         } else {
-                            self.arpeggio = Some(Player::init(arp, &self.midi_out));
+                            self.arpeggio = Some(Player::init(arp, &self.midi_out, &settings.double_notes));
                             status.reset_beat();
                         }
                     }
@@ -311,7 +311,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                         let arp = self.recorded.as_ref().unwrap();
                         let original = arp.first_note();
                         let new_arp = arp.transpose(original, original);
-                        self.arpeggios.insert(original, Player::init(new_arp, &self.midi_out));
+                        self.arpeggios.insert(original, Player::init(new_arp, &self.midi_out, &settings.double_notes));
                         status.reset_beat();
                     }
                 }
@@ -328,7 +328,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                 } else if let Some(arp) = &self.recorded {
                     let original = arp.first_note();
                     let new_arp = arp.transpose(original, n);
-                    self.arpeggios.insert(n, Player::init(new_arp, &self.midi_out));
+                    self.arpeggios.insert(n, Player::init(new_arp, &self.midi_out, &settings.double_notes));
                     status.reset_beat();
                 }
             },
