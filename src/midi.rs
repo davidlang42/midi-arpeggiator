@@ -63,7 +63,7 @@ impl InputDevice {
     pub fn read(&mut self) -> Result<MidiMessage<'static>, mpsc::RecvError> {
         for thread in &self.threads {
             if thread.is_finished() {
-                panic!("InputDevice thread finished");
+                println!("Input thread has finished");
             }
         }
         self.receiver.recv()
@@ -102,7 +102,7 @@ impl InputDevice {
                 }
             }
         }
-        panic!("Input device has disconnected.");
+        println!("Input device has disconnected");
     }
 }
 
@@ -159,7 +159,7 @@ impl ClockDevice {
                 }
             }
         }
-        panic!("Clock device has disconnected.");
+        println!("Clock device has disconnected");
     }
 }
 
@@ -176,7 +176,7 @@ impl OutputDevice {
 
     pub fn send(&self, message: MidiMessage<'static>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         if self.thread.is_finished() {
-            panic!("OutputDevice thread finished");
+            println!("Output thread has finished");
         }
         self.sender.send(message)
     }
@@ -195,13 +195,13 @@ impl OutputDevice {
                 Err(_) => panic!("Error writing midi message: Too many bytes (expected {}).", expected),
                 _ => {}
             }
-            if f.write_all(&buf).is_err() {
-                panic!("Error writing to device.")
+            if let Err(e) = f.write_all(&buf) {
+                println!("Error writing to output device: {}", e);
             }
-            if f.flush().is_err() {
-                panic!("Error flushing to device.");
+            if let Err(e) = f.flush() {
+                println!("Error flushing output device: {}", e);
             }
         }
-        panic!("Writing from queue has finished.");
+        println!("Output device has disconnected");
     }
 }
