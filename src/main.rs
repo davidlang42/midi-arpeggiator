@@ -3,7 +3,7 @@ use std::{env, fs, thread};
 use std::error::Error;
 
 use arpeggiator::MultiArpeggiator;
-use settings::{PredefinedProgramChanges, Settings};
+use settings::{Settings, SettingsWithProgramInfo, SpecificProgramChanges};
 use midi::{InputDevice, OutputDevice, ClockDevice};
 use status::{LedStatus, StatusSignal};
 //use crate::status::TextStatus;
@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS_FILE: &str = "settings.json";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
-    let settings_list = Settings::load(args.next().unwrap_or(DEFAULT_SETTINGS_FILE.to_owned()))?;
+    let settings_list = SettingsWithProgramInfo::load(args.next().unwrap_or(DEFAULT_SETTINGS_FILE.to_owned()))?;
     let mut status = LedStatus::<8>::new(18); //TextStatus::_new(std::io::stdout())
     if let Some(midi_in) = args.next() {
         if let Some(midi_out) = args.next() {
@@ -50,19 +50,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn run_and_print<SS: StatusSignal>(midi_in: &str, midi_out: &str, settings_list: &Vec<Settings>, status: &mut SS) {
+fn run_and_print<SS: StatusSignal>(midi_in: &str, midi_out: &str, settings_list: &Vec<SettingsWithProgramInfo>, status: &mut SS) {
     match run(midi_in, midi_out, settings_list, status) {
         Ok(()) => println!("Arpeggiator disconnected OK"),
         Err(e) => println!("Arpeggiator disconnected with error: {}", e)
     }
 }
 
-fn run<SS: StatusSignal>(midi_in: &str, midi_out: &str, settings_list: &Vec<Settings>, status: &mut SS) -> Result<(), Box<dyn Error>> {
+fn run<SS: StatusSignal>(midi_in: &str, midi_out: &str, settings_list: &Vec<SettingsWithProgramInfo>, status: &mut SS) -> Result<(), Box<dyn Error>> {
     println!("Starting arpeggiator with MIDI-IN: {}, MIDI-OUT: {}", midi_in, midi_out);
+    let default_settings = Settings::passthrough();
     MultiArpeggiator {
         midi_in: InputDevice::open_with_external_clock(&midi_in, &midi_out)?,
         midi_out: OutputDevice::open(&midi_out)?,
-        settings: PredefinedProgramChanges::new(settings_list),
+        settings: SpecificProgramChanges::new(settings_list, &default_settings),
         status
     }.listen()
 }
