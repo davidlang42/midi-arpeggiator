@@ -52,7 +52,7 @@ pub trait SettingsGetter: MidiReceiver {
     fn get(&self) -> &Settings;
 }
 
-pub struct PredefinedProgramChanges<'a> {
+pub struct WraparoundProgramChanges<'a> {
     predefined: &'a Vec<Settings>,
     index: usize,
     msb: u8,
@@ -60,7 +60,7 @@ pub struct PredefinedProgramChanges<'a> {
     pc: u8
 }
 
-impl<'a> MidiReceiver for PredefinedProgramChanges<'a> {
+impl<'a> MidiReceiver for WraparoundProgramChanges<'a> {
     fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
         match message {
             MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT, msb) => {
@@ -81,13 +81,13 @@ impl<'a> MidiReceiver for PredefinedProgramChanges<'a> {
     }
 }
 
-impl<'a> SettingsGetter for PredefinedProgramChanges<'a> {
+impl<'a> SettingsGetter for WraparoundProgramChanges<'a> {
     fn get(&self) -> &Settings {
         &self.predefined[self.index]
     }
 }
 
-impl<'a> PredefinedProgramChanges<'a> {
+impl<'a> WraparoundProgramChanges<'a> {
     pub fn new(predefined: &'a Vec<Settings>) -> Self {
         if predefined.len() > u8::from(U7::MAX) as usize * u8::from(U7::MAX) as usize * u8::from(U7::MAX) as usize {
             panic!("Too many predefined program changes for 3 U7s");

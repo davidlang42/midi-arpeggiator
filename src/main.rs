@@ -3,7 +3,7 @@ use std::{env, fs, thread};
 use std::error::Error;
 
 use arpeggiator::MultiArpeggiator;
-use settings::{PredefinedProgramChanges, Settings};
+use settings::{WraparoundProgramChanges, Settings};
 use midi::{InputDevice, OutputDevice, ClockDevice};
 use status::{LedStatus, StatusSignal};
 //use crate::status::TextStatus;
@@ -62,7 +62,7 @@ fn run<SS: StatusSignal>(midi_in: &str, midi_out: &str, settings_list: &Vec<Sett
     MultiArpeggiator {
         midi_in: InputDevice::open_with_external_clock(&midi_in, &midi_out)?,
         midi_out: OutputDevice::open(&midi_out)?,
-        settings: PredefinedProgramChanges::new(settings_list),
+        settings: WraparoundProgramChanges::new(settings_list),
         status
     }.listen()
 }
