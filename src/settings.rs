@@ -120,6 +120,7 @@ pub struct SettingsWithProgramInfo {
     pub lsb: u8, // 0-127
     pub msb: u8, // 0-127
     pub pc: u8, // 1-128
+    #[serde(flatten)]
     pub settings: Settings
 }
 
