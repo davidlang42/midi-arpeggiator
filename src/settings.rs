@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::time::Instant;
@@ -20,6 +21,18 @@ pub struct Settings {
 }
 
 impl Settings {
+    pub fn passthrough() -> Self {
+        Self {
+            mode: ArpeggiatorMode::Passthrough,
+            finish_pattern: false,
+            fixed_velocity: None,
+            fixed_steps: None,
+            fixed_notes_per_step: None,
+            pattern: Pattern::Up,
+            double_notes: None,
+        }
+    }
+
     pub fn generate_steps(&self, notes: Vec<NoteDetails>) -> Vec<Step> {
         if let Some(steps) = self.fixed_steps {
             self.pattern.of(notes, steps)
@@ -41,7 +54,7 @@ impl Settings {
         }
     }
 
-    pub fn load(file: String) -> Result<Vec<Self>, Box<dyn Error>> {
+    pub fn _load(file: String) -> Result<Vec<Self>, Box<dyn Error>> {
         let json = fs::read_to_string(&file).map_err(|e| format!("Cannot read from '{}': {}", file, e))?;
         let settings: Vec<Settings> = serde_json::from_str(&format!("[{}]", json)).map_err(|e| format!("Cannot parse settigs from '{}': {}", file, e))?;
         Ok(settings)
@@ -88,7 +101,7 @@ impl<'a> SettingsGetter for WraparoundProgramChanges<'a> {
 }
 
 impl<'a> WraparoundProgramChanges<'a> {
-    pub fn new(predefined: &'a Vec<Settings>) -> Self {
+    pub fn _new(predefined: &'a Vec<Settings>) -> Self {
         if predefined.len() > u8::from(U7::MAX) as usize * u8::from(U7::MAX) as usize * u8::from(U7::MAX) as usize {
             panic!("Too many predefined program changes for 3 U7s");
         }
@@ -98,6 +111,79 @@ impl<'a> WraparoundProgramChanges<'a> {
             lsb: 0,
             pc: 0,
             index: 0
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct SettingsWithProgramInfo {
+    pub lsb: u8, // 0-127
+    pub msb: u8, // 0-127
+    pub pc: u8, // 1-128
+    pub settings: Settings
+}
+
+impl SettingsWithProgramInfo {
+    pub fn load(file: String) -> Result<Vec<Self>, Box<dyn Error>> {
+        let json = fs::read_to_string(&file).map_err(|e| format!("Cannot read from '{}': {}", file, e))?;
+        let settings: Vec<SettingsWithProgramInfo> = serde_json::from_str(&format!("[{}]", json)).map_err(|e| format!("Cannot parse settigs from '{}': {}", file, e))?;
+        Ok(settings)
+    }
+}
+
+pub struct SpecificProgramChanges<'a> {
+    predefined: HashMap<(u8, u8, u8), &'a Settings>,
+    default: &'a Settings,
+    current: &'a Settings,
+    msb: u8,
+    lsb: u8,
+    pc: u8
+}
+
+impl<'a> MidiReceiver for SpecificProgramChanges<'a> {
+    fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
+        match message {
+            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT, msb) => {
+                self.msb = msb.into();
+                None
+            },
+            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT_LSB, lsb) => {
+                self.lsb = lsb.into();
+                None
+            },
+            MidiMessage::ProgramChange(_, pc) => {
+                self.pc = u8::from(pc) + 1; // pc is 1 based
+                if let Some(specific) = self.predefined.get(&(self.msb, self.lsb, self.pc)) {
+                    self.current = specific;
+                } else {
+                    self.current = self.default;
+                }
+                None
+            },
+            _ => Some(message)
+        }
+    }
+}
+
+impl<'a> SettingsGetter for SpecificProgramChanges<'a> {
+    fn get(&self) -> &Settings {
+        &self.current
+    }
+}
+
+impl<'a> SpecificProgramChanges<'a> {
+    pub fn new(settings_with_program_info: &'a Vec<SettingsWithProgramInfo>, default_settings: &'a Settings) -> Self {
+        let mut predefined = HashMap::new();
+        for s in settings_with_program_info {
+            predefined.insert((s.msb, s.lsb, s.pc), &s.settings);
+        }
+        Self {
+            predefined,
+            msb: 0,
+            lsb: 0,
+            pc: 0,
+            current: default_settings,
+            default: default_settings
         }
     }
 }
