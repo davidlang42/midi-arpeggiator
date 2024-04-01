@@ -1,5 +1,5 @@
 use std::error::Error;
-use wmidi::{ControlFunction, MidiMessage};
+use wmidi::{ControlFunction, MidiMessage, U7};
 
 use strum_macros::EnumIter;
 
@@ -178,8 +178,16 @@ impl<'a> Passthrough<'a> {
 }
 
 impl<'a> Arpeggiator for Passthrough<'a> {
-    fn process(&mut self, message: MidiMessage<'static>, settings: &Settings, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, mut message: MidiMessage<'static>, settings: &Settings, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         if Self::should_passthrough(&message) {
+            if let Some(fixed) = settings.fixed_velocity {
+                message = match message {
+                    MidiMessage::NoteOff(c, n, _) => MidiMessage::NoteOff(c, n, U7::from_u8_lossy(fixed)),
+                    MidiMessage::NoteOn(c, n, _) => MidiMessage::NoteOn(c, n, U7::from_u8_lossy(fixed)),
+                    MidiMessage::PolyphonicKeyPressure(c, n, _) => MidiMessage::PolyphonicKeyPressure(c, n, U7::from_u8_lossy(fixed)),
+                    _ => message
+                };
+            }
             if let Some(doubling) = &settings.double_notes {
                 self.0.send_with_doubling(message, doubling.iter())?;
             } else {
