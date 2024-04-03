@@ -57,7 +57,6 @@ The following instructions describe how I set it up, which worked successfully f
 - Type this into nano:
 ```
 #!/usr/bin/bash
-sleep 10 # to wait for midi devices to be ready
 /home/pi/midi-arpeggiator/target/release/midi-arpeggiator /home/pi/arpeggiator_settings.json
 ```
 - Ctrl+X to exit nano (and save)
@@ -70,10 +69,10 @@ sleep 10 # to wait for midi devices to be ready
 - `nano ~/arpeggiator_settings.json`
 - Type your settings into nano:
 ```
-{ "finish_pattern": true, "mode": "PressHold", "pattern": "Up", "fixed_steps": 4, "fixed_velocity": 100 },
-{ "finish_pattern": true, "mode": "PressHold", "pattern": "Down", "fixed_steps": 3, "fixed_velocity": 100 },
-{ "finish_pattern": true, "mode": "PressHold", "pattern": "Up", "fixed_steps": 1, "fixed_velocity": 100 },
-{ "finish_pattern": true, "mode": "SyncedPedalRecorder", "pattern": "Up", "fixed_velocity": 100 }
+{ "msb": 0, "lsb": 0, "pc": 1, "finish_pattern": true, "mode": "PressHold", "pattern": "Up", "fixed_steps": 4, "fixed_velocity": 100 },
+{ "msb": 0, "lsb": 0, "pc": 2, "finish_pattern": true, "mode": "PressHold", "pattern": "Down", "fixed_steps": 3, "fixed_velocity": 100 },
+{ "msb": 0, "lsb": 0, "pc": 3, "finish_pattern": true, "mode": "PressHold", "pattern": "Up", "fixed_steps": 1, "fixed_velocity": 100 },
+{ "msb": 0, "lsb": 0, "pc": 4, "finish_pattern": true, "mode": "SyncedPedalRecorder", "pattern": "Up", "fixed_velocity": 100 }
 ```
 - Ctrl+X to exit nano (and save)
 13. Reboot to make the arpeggiator run (with MIDI devices attached, see [README](/README.md)) `sudo reboot`
