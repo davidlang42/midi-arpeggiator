@@ -6,6 +6,7 @@ use std::io::{Read, Write};
 use std::error::Error;
 use std::thread::JoinHandle;
 use std::time::Duration;
+use wmidi::ControlFunction;
 use wmidi::FromBytesError;
 use wmidi::MidiMessage;
 use wmidi::Note;
@@ -45,14 +46,14 @@ impl InputDevice {
         })
     }
 
-    pub fn open_with_external_clock(midi_in: &str, clock_in: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn open_with_external_clock(midi_in: &str, clock_in: &str, include_msb_lsb_prog_change_from_clock: bool) -> Result<Self, Box<dyn Error>> {
         let (tx, rx) = mpsc::channel();
         let include_clock_ticks = midi_in == clock_in;
         let mut input = fs::File::options().read(true).open(midi_in).map_err(|e| format!("Cannot open MIDI IN '{}': {}", midi_in, e))?;
         let clock = ClockDevice::init(clock_in)?;
         let mut threads = Vec::new();
         if !include_clock_ticks {
-            threads.push(clock.connect(tx.clone())?);
+            threads.push(clock.connect(tx.clone(), include_msb_lsb_prog_change_from_clock)?);
         }
         threads.push(thread::Builder::new().name(format!("midi-in")).spawn(move || Self::read_into_queue(&mut input, tx, include_clock_ticks, true))?);
         Ok(Self {
@@ -147,10 +148,14 @@ impl ClockDevice {
         }
     }
 
-    pub fn connect(self, sender: mpsc::Sender<MidiMessage<'static>>) -> Result<JoinHandle<()>, Box<dyn Error>> {
+    pub fn connect(self, sender: mpsc::Sender<MidiMessage<'static>>, include_msb_lsb_program_change: bool) -> Result<JoinHandle<()>, Box<dyn Error>> {
         let mut clock = fs::File::options().read(true).open(&self.path)
             .map_err(|e| format!("Cannot open Clock device '{}': {}", self.path.display(), e))?;
-        Ok(thread::Builder::new().name(format!("midi-clock")).spawn(move || Self::read_clocks_into_queue(&mut clock, sender))?)
+        if include_msb_lsb_program_change {
+            Ok(thread::Builder::new().name(format!("midi-clock")).spawn(move || Self::read_clocks_and_prog_change_into_queue(&mut clock, sender))?)
+        } else {
+            Ok(thread::Builder::new().name(format!("midi-clock")).spawn(move || Self::read_clocks_into_queue(&mut clock, sender))?)
+        }
     }
 
     fn read_clocks_into_queue(f: &mut fs::File, tx: mpsc::Sender<MidiMessage>) {
@@ -160,6 +165,48 @@ impl ClockDevice {
                 // tick detected, send to queue
                 if let Err(e) = tx.send(MidiMessage::TimingClock) {
                     panic!("Error sending clock to queue: {}", e);
+                }
+            }
+        }
+        println!("Clock device has disconnected");
+    }
+
+    fn read_clocks_and_prog_change_into_queue(f: &mut fs::File, tx: mpsc::Sender<MidiMessage>) {
+        let mut buf: [u8; 1] = [0; 1];
+        let mut bytes = Vec::new();
+        while f.read_exact(&mut buf).is_ok() {
+            bytes.push(buf[0]);
+            match MidiMessage::try_from(bytes.as_slice()) {
+                Ok(MidiMessage::TimingClock) => {
+                    if let Err(e) = tx.send(MidiMessage::TimingClock) {
+                        panic!("Error sending clock to queue: {}", e);
+                    }
+                    bytes.clear();
+                },
+                Ok(MidiMessage::ControlChange(ch, ControlFunction::BANK_SELECT, msb)) => {
+                    if let Err(e) = tx.send(MidiMessage::ControlChange(ch, ControlFunction::BANK_SELECT, msb)) {
+                        panic!("Error sending MSB to queue: {}", e);
+                    }
+                    bytes.clear();
+                },
+                Ok(MidiMessage::ControlChange(ch, ControlFunction::BANK_SELECT_LSB, lsb)) => {
+                    if let Err(e) = tx.send(MidiMessage::ControlChange(ch, ControlFunction::BANK_SELECT_LSB, lsb)) {
+                        panic!("Error sending LSB to queue: {}", e);
+                    }
+                    bytes.clear();
+                },
+                Ok(MidiMessage::ProgramChange(ch, pc)) => {
+                    if let Err(e) = tx.send(MidiMessage::ProgramChange(ch, pc)) {
+                        panic!("Error sending PC to queue: {}", e);
+                    }
+                    bytes.clear();
+                },
+                Err(FromBytesError::NoBytes) | Err(FromBytesError::NoSysExEndByte) | Err(FromBytesError::NotEnoughBytes) => {
+                    // wait for more bytes
+                }, 
+                _ => {
+                    // invalid (or unwanted) message, clear and wait for next message
+                    bytes.clear();
                 }
             }
         }
