@@ -76,15 +76,15 @@ pub struct WraparoundProgramChanges<'a> {
 impl<'a> MidiReceiver for WraparoundProgramChanges<'a> {
     fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
         match message {
-            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT, msb) => {
+            MidiMessage::ControlChange(Self::RECEIVE_CHANNEL, ControlFunction::BANK_SELECT, msb) => {
                 self.msb = msb.into();
                 None
             },
-            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT_LSB, lsb) => {
+            MidiMessage::ControlChange(Self::RECEIVE_CHANNEL, ControlFunction::BANK_SELECT_LSB, lsb) => {
                 self.lsb = lsb.into();
                 None
             },
-            MidiMessage::ProgramChange(_, pc) => {
+            MidiMessage::ProgramChange(Self::RECEIVE_CHANNEL, pc) => {
                 self.pc = pc.into();
                 self.index = ((self.msb as usize * u8::from(U7::MAX) as usize + self.lsb as usize) * u8::from(U7::MAX) as usize + self.pc as usize) % self.predefined.len();
                 None
@@ -101,6 +101,8 @@ impl<'a> SettingsGetter for WraparoundProgramChanges<'a> {
 }
 
 impl<'a> WraparoundProgramChanges<'a> {
+    const RECEIVE_CHANNEL: Channel = Channel::Ch1;
+
     pub fn _new(predefined: &'a Vec<Settings>) -> Self {
         if predefined.len() > u8::from(U7::MAX) as usize * u8::from(U7::MAX) as usize * u8::from(U7::MAX) as usize {
             panic!("Too many predefined program changes for 3 U7s");
@@ -144,15 +146,15 @@ pub struct SpecificProgramChanges<'a> {
 impl<'a> MidiReceiver for SpecificProgramChanges<'a> {
     fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
         match message {
-            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT, msb) => {
+            MidiMessage::ControlChange(Self::RECEIVE_CHANNEL, ControlFunction::BANK_SELECT, msb) => {
                 self.msb = msb.into();
                 None
             },
-            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT_LSB, lsb) => {
+            MidiMessage::ControlChange(Self::RECEIVE_CHANNEL, ControlFunction::BANK_SELECT_LSB, lsb) => {
                 self.lsb = lsb.into();
                 None
             },
-            MidiMessage::ProgramChange(_, pc) => {
+            MidiMessage::ProgramChange(Self::RECEIVE_CHANNEL, pc) => {
                 self.pc = u8::from(pc) + 1; // pc is 1 based
                 if let Some(specific) = self.predefined.get(&(self.msb, self.lsb, self.pc)) {
                     self.current = specific;
@@ -173,6 +175,8 @@ impl<'a> SettingsGetter for SpecificProgramChanges<'a> {
 }
 
 impl<'a> SpecificProgramChanges<'a> {
+    const RECEIVE_CHANNEL: Channel = Channel::Ch1;
+
     pub fn new(settings_with_program_info: &'a Vec<SettingsWithProgramInfo>, default_settings: &'a Settings) -> Self {
         let mut predefined = HashMap::new();
         for s in settings_with_program_info {
