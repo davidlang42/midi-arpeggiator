@@ -181,27 +181,31 @@ impl ClockDevice {
                     if let Err(e) = tx.send(MidiMessage::TimingClock) {
                         panic!("Error sending clock to queue: {}", e);
                     }
+                    bytes.clear();
                 },
                 Ok(MidiMessage::ControlChange(ch, ControlFunction::BANK_SELECT, msb)) => {
                     if let Err(e) = tx.send(MidiMessage::ControlChange(ch, ControlFunction::BANK_SELECT, msb)) {
                         panic!("Error sending MSB to queue: {}", e);
                     }
+                    bytes.clear();
                 },
                 Ok(MidiMessage::ControlChange(ch, ControlFunction::BANK_SELECT_LSB, lsb)) => {
                     if let Err(e) = tx.send(MidiMessage::ControlChange(ch, ControlFunction::BANK_SELECT_LSB, lsb)) {
                         panic!("Error sending LSB to queue: {}", e);
                     }
+                    bytes.clear();
                 },
                 Ok(MidiMessage::ProgramChange(ch, pc)) => {
                     if let Err(e) = tx.send(MidiMessage::ProgramChange(ch, pc)) {
                         panic!("Error sending PC to queue: {}", e);
                     }
+                    bytes.clear();
                 },
                 Err(FromBytesError::NoBytes) | Err(FromBytesError::NoSysExEndByte) | Err(FromBytesError::NotEnoughBytes) => {
                     // wait for more bytes
                 }, 
                 _ => {
-                    // invalid message, clear and wait for next message
+                    // invalid (or unwanted) message, clear and wait for next message
                     bytes.clear();
                 }
             }
