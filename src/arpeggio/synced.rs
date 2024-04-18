@@ -1,6 +1,6 @@
 use std::{sync::mpsc, error::Error};
 use std::fmt;
-use wmidi::{Note, MidiMessage};
+use wmidi::{Note, MidiMessage, Channel, Velocity};
 use crate::midi::{self, MidiOutput};
 use crate::presets::Preset;
 use super::{NoteDetails, Step};
@@ -49,10 +49,10 @@ impl Arpeggio {
         Self { steps, ticks_per_step, finish_steps }
     }
 
-    pub fn from_preset(preset: &Preset, c: wmidi::Channel, v: wmidi::Velocity, finish_steps: bool) -> Self {
+    pub fn from_preset(preset: &Preset, channel: Channel, velocity: Velocity, finish_steps: bool) -> Self {
         let mut steps = Vec::new();
         for n in &preset.steps {
-            steps.push(Step::note(NoteDetails { c, n: n.into(), v }));
+            steps.push(Step::note(NoteDetails { c: channel, n: n.into(), v: velocity }));
         }
         Self {
             steps,
