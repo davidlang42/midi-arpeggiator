@@ -394,6 +394,8 @@ impl<'a> PrerecordedSets<'a> {
 }
 
 impl<'a> PrerecordedSets<'a> {
+    const SEND_CHANNEL: Channel = Channel::Ch1;
+
     fn find_preset(&self, notes: &HashSet<Note>) -> Option<usize> {
         for i in 0..self.presets.len() {
             if self.presets[i].is_triggered_by(&notes) {
@@ -403,8 +405,6 @@ impl<'a> PrerecordedSets<'a> {
         None
     }
 }
-
-const SEND_CHANNEL: Channel = Channel::Ch1;
 
 impl<'a> Arpeggiator for PrerecordedSets<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
@@ -424,7 +424,7 @@ impl<'a> Arpeggiator for PrerecordedSets<'a> {
                         if let Some(existing) = &mut self.playing {
                             existing.force_stop()?;
                         }
-                        let new_arp = Arpeggio::from_preset(&self.presets[p], SEND_CHANNEL, U7::from_u8_lossy(settings.fixed_velocity.unwrap_or(100)), settings.finish_pattern);
+                        let new_arp = Arpeggio::from_preset(&self.presets[p], Self::SEND_CHANNEL, U7::from_u8_lossy(settings.fixed_velocity.unwrap_or(100)), settings.finish_pattern);
                         self.playing = Some(Player::init(new_arp, self.midi_out, &settings.double_notes));
                         status.reset_beat();
                     } else {
