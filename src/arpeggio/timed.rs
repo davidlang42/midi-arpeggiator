@@ -4,6 +4,7 @@ use std::sync::{mpsc, Arc, atomic::{AtomicBool, Ordering}};
 use std::thread::{self, JoinHandle};
 use std::fmt;
 use wmidi::{Note, MidiMessage};
+use crate::arpeggiator::Pattern;
 use crate::midi::{self, MidiOutput};
 
 use super::{Step, NoteDetails};
@@ -45,6 +46,25 @@ impl Arpeggio {
         }
         Ok(())
     }
+
+    fn play_once(&self, midi_out: MidiOutput, should_stop: Arc<AtomicBool>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+        let mut i = 0;
+        while !should_stop.load(Ordering::Relaxed) {
+            let step = &self.steps[i].1;
+            step.send_on(&midi_out)?;
+            if i == self.steps.len() - 1 {
+                i = 0;
+            } else {
+                i += 1;
+            }
+            thread::sleep(self.steps[i].0);
+            step.send_off(&midi_out)?;
+            if i == 0 {
+                break;
+            }
+        }
+        Ok(())
+    }
     
     fn bpm(&self) -> f64 {
         let beats = self.steps.len() as f64;
@@ -77,6 +97,19 @@ impl Arpeggio {
         Self { steps, period, finish_steps }
     }
 
+    pub fn even(notes: Vec<NoteDetails>, wait_between_notes: Duration, pattern: Pattern, finish_steps: bool) -> Self {
+        if notes.len() == 0 {
+            panic!("Cannot construct an Arpeggio without any notes");
+        }
+        let period = wait_between_notes * notes.len() as u32;
+        let mut steps = Vec::new();
+        let notes_len = notes.len();
+        for step in pattern.of(notes, notes_len) {
+            steps.push((wait_between_notes, step));
+        }
+        Self { steps, period, finish_steps }
+    }
+
     pub fn transpose(&self, from: Note, to: Note) -> Self {
         let from_u8: u8 = from.into();
         let to_u8: u8 = to.into();
@@ -101,6 +134,17 @@ impl Player {
         let should_stop = Arc::new(AtomicBool::new(false));
         let should_stop_cloned = Arc::clone(&should_stop);
         let thread = thread::Builder::new().name(format!("arp:{}", arpeggio)).spawn(move || arpeggio.play(output, should_stop_cloned))?;
+        Ok(Self {
+            thread,
+            should_stop
+        })
+    }
+
+    pub fn play_once(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, doubling: &Option<Vec<i8>>) -> Result<Self, Box<dyn Error>> {
+        let output = midi_out.with_doubling(doubling);
+        let should_stop = Arc::new(AtomicBool::new(false));
+        let should_stop_cloned = Arc::clone(&should_stop);
+        let thread = thread::Builder::new().name(format!("arp:{}", arpeggio)).spawn(move || arpeggio.play_once(output, should_stop_cloned))?;
         Ok(Self {
             thread,
             should_stop

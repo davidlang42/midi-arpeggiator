@@ -81,7 +81,8 @@ pub enum ArpeggiatorMode {
     PressHold,
     MutatingHold,
     SyncedPedalRecorder,
-    EvenMutator
+    EvenMutator,
+    OneShot
 }
 
 impl ArpeggiatorMode {
@@ -93,7 +94,8 @@ impl ArpeggiatorMode {
             Self::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out)),
             Self::RepeatRecorder => Box::new(timed::RepeatRecorder::new(midi_out)),
             Self::SyncedPedalRecorder => Box::new(synced::PedalRecorder::new(midi_out)),
-            Self::EvenMutator => Box::new(full_length::EvenMutator::new(midi_out))
+            Self::EvenMutator => Box::new(full_length::EvenMutator::new(midi_out)),
+            Self::OneShot => Box::new(timed::OneShot::new(midi_out))
         }
     }
 }

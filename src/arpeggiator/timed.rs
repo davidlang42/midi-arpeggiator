@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::mem;
-use std::time::Instant;
-use wmidi::{Note, MidiMessage, ControlFunction};
+use std::time::{Duration, Instant};
+use wmidi::{ControlFunction, MidiMessage, Note, U7};
 use crate::status::StatusSignal;
 use crate::midi;
 use crate::arpeggio::NoteDetails;
@@ -187,4 +187,98 @@ fn drain_and_wait_for_stop<N>(arpeggios: &mut HashMap<N, Player>) -> Result<(), 
         player.ensure_stopped()?;
     }
     Ok(())
+}
+
+const START_THRESHOLD_TICKS: u8 = 3;
+
+pub struct OneShot<'a> {
+    midi_out: &'a midi::OutputDevice,
+    starting: Option<(u8, Vec<NoteDetails>)>,
+    playing: Option<Player>,
+    min_wait: Duration,
+    max_wait: Duration,
+    expected_wait: Duration,
+    last_arp: Instant,
+    last_arp_length: usize
+}
+
+impl<'a> OneShot<'a> {
+    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
+        let expected_wait = 125; // 125ms = 1 semiquaver @ 120bpm
+        let min_wait = Duration::from_millis((expected_wait as f64 * 0.8) as u64);
+        let max_wait = Duration::from_millis((expected_wait as f64 * 1.2) as u64);
+        Self {
+            midi_out,
+            starting: None,
+            playing: None,
+            min_wait,
+            max_wait,
+            expected_wait: Duration::from_millis(expected_wait),
+            last_arp: Instant::now(),
+            last_arp_length: 1
+        }
+    }
+}
+
+impl<'a> Arpeggiator for OneShot<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+        match received {
+            MidiMessage::NoteOn(c, n, v) => {
+                let nd = NoteDetails::new(c, n, v, settings.fixed_velocity);
+                if let Some((_, notes)) = &mut self.starting {
+                    notes.push(nd);
+                } else {
+                    self.starting = Some((START_THRESHOLD_TICKS, vec![nd]));
+                }
+            },
+            MidiMessage::TimingClock => {
+                let mut temp = None;
+                mem::swap(&mut self.starting, &mut temp);
+                if let Some((remaining_ticks, notes)) = temp {
+                    if remaining_ticks == 0 {
+                        let now = Instant::now();
+                        let time_passed = (now - self.last_arp);
+                        let mut arp_wait = (now - self.last_arp) / self.last_arp_length as u32;
+                        if arp_wait > self.max_wait || arp_wait < self.min_wait {
+                            println!("Use default: {}ms (would have been {}ms / {})", self.expected_wait.as_millis(), time_passed.as_millis(), self.last_arp_length);
+                            arp_wait = self.expected_wait;
+                        } else {
+                            println!("Wait: {}ms", arp_wait.as_millis());
+                        }
+                        
+                        self.last_arp_length = notes.len();
+                        self.last_arp = now;
+                        if let Some(existing) = &mut self.playing {
+                            existing.stop();
+                        }
+                        let arp = Arpeggio::even(notes, arp_wait, settings.pattern, settings.finish_pattern);
+                        self.playing = Some(Player::play_once(arp, &self.midi_out, &settings.double_notes)?);
+                        //status.reset_beat();
+                        self.starting = None;
+                    } else {
+                        self.starting = Some((remaining_ticks - 1, notes));
+                    }
+                }
+            },
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut temp = None;
+        mem::swap(&mut self.playing, &mut temp);
+        if let Some(existing) = temp {
+            existing.ensure_stopped()?;
+        }
+        Ok(())
+    }
+
+    fn count_arpeggios(&self) -> usize {
+        if self.playing.is_some() {
+            1
+        } else {
+            0
+        }
+    }
 }
