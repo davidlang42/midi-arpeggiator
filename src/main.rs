@@ -44,14 +44,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             if ClockDevice::init(&devices[0]).is_ok() {
                 run_and_print(&devices[1], &devices[0], &settings_list, &mut status);
             } else if ClockDevice::init(&devices[1]).is_ok() {
-                run_and_print(&devices[1], &devices[0], &settings_list, &mut status);
+                run_and_print(&devices[0], &devices[1], &settings_list, &mut status);
             }
         }
     }
 }
 
-fn run_and_print<SS: StatusSignal>(midi_in: &str, midi_out: &str, settings_list: &Vec<SettingsWithProgramInfo>, status: &mut SS) {
-    match run(midi_in, midi_out, settings_list, status) {
+fn run_and_print<SS: StatusSignal>(midi_in: &str, midi_out_with_clock: &str, settings_list: &Vec<SettingsWithProgramInfo>, status: &mut SS) {
+    match run(midi_in, midi_out_with_clock, settings_list, status) {
         Ok(()) => println!("Arpeggiator disconnected OK"),
         Err(e) => println!("Arpeggiator disconnected with error: {}", e)
     }
