@@ -1,4 +1,4 @@
-use wmidi::{Note, MidiMessage, ControlFunction};
+use wmidi::{Channel, ControlFunction, MidiMessage, Note, U7};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::mem;
@@ -404,6 +404,8 @@ impl<'a> PrerecordedSets<'a> {
     }
 }
 
+const SEND_CHANNEL: Channel = Channel::Ch1;
+
 impl<'a> Arpeggiator for PrerecordedSets<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
@@ -417,11 +419,12 @@ impl<'a> Arpeggiator for PrerecordedSets<'a> {
             },
             MidiMessage::TimingClock => {
                 if self.changed {
+                    self.changed = false;
                     if let Some(p) = self.find_preset(&self.notes) {
                         if let Some(existing) = &mut self.playing {
                             existing.force_stop()?;
                         }
-                        let new_arp = self.presets[p].make_arpeggio();
+                        let new_arp = Arpeggio::from_preset(&self.presets[p], SEND_CHANNEL, U7::from_u8_lossy(settings.fixed_velocity.unwrap_or(100)), settings.finish_pattern);
                         self.playing = Some(Player::init(new_arp, self.midi_out, &settings.double_notes));
                         status.reset_beat();
                     } else {

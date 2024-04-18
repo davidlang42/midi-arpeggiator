@@ -1,3 +1,4 @@
-{ "msb": 0, "lsb": 0, "pc": 2, "finish_pattern": true, "mode": "PrerecordedSets", "pattern": "Up", "presets": [
-    {"trigger": ["C4"], "steps": ["C4", "D4", "E4", "G4"]}
+{ "msb": 0, "lsb": 0, "pc": 2, "finish_pattern": true, "mode": "PrerecordedSets", "pattern": "Up", "double_notes": [12], "presets": [
+    {"trigger": ["C4", "E4", "G4"], "steps": ["C4", "E4", "G4", "C4", "F4", "A4", "C4", "E4", "G4", "C4", "F4", "A4", "C4", "E4", "G4", "C4"], "ticks_per_step": 6},
+    {"trigger": ["C4", "F4", "A4"], "steps": ["C4", "F4", "A4", "C4", "G4", "Bb4", "C4", "F4", "A4", "C4", "G4", "Bb4", "C4", "F4", "A4", "C4"], "ticks_per_step": 6}
 ]}

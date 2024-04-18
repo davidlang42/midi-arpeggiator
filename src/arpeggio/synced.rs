@@ -2,7 +2,8 @@ use std::{sync::mpsc, error::Error};
 use std::fmt;
 use wmidi::{Note, MidiMessage};
 use crate::midi::{self, MidiOutput};
-use super::Step;
+use crate::presets::Preset;
+use super::{NoteDetails, Step};
 
 pub struct Arpeggio {
     steps: Vec<Step>,
@@ -46,6 +47,18 @@ impl Arpeggio {
             total_ticks / steps.len()
         };
         Self { steps, ticks_per_step, finish_steps }
+    }
+
+    pub fn from_preset(preset: &Preset, c: wmidi::Channel, v: wmidi::Velocity, finish_steps: bool) -> Self {
+        let mut steps = Vec::new();
+        for n in &preset.steps {
+            steps.push(Step::note(NoteDetails { c, n: n.into(), v }));
+        }
+        Self {
+            steps,
+            ticks_per_step: preset.ticks_per_step,
+            finish_steps
+        }
     }
 
     pub fn transpose(&self, from: Note, to: Note) -> Self {

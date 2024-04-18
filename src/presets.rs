@@ -2,12 +2,13 @@ use std::collections::HashSet;
 
 use wmidi::Note;
 
-use crate::{arpeggio::synced::Arpeggio, notename::NoteName};
+use crate::notename::NoteName;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Preset {
     pub trigger: Vec<NoteName>,
-    steps: Vec<NoteName>
+    pub steps: Vec<NoteName>,
+    pub ticks_per_step: usize
 }
 
 impl Preset {
@@ -17,10 +18,5 @@ impl Preset {
         } else {
             self.trigger.iter().all(|n| notes.contains(&n.into()))
         }
-    }
-
-    pub fn make_arpeggio(&self) -> Arpeggio {
-        //TODO
-        todo!()
     }
 }
