@@ -1,4 +1,4 @@
-use wmidi::{Note, MidiMessage, ControlFunction};
+use wmidi::{Channel, ControlFunction, MidiMessage, Note, U7};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::mem;
@@ -6,6 +6,7 @@ use std::time::Instant;
 use crate::midi;
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggio::synced::{Arpeggio, Player};
+use crate::presets::Preset;
 use crate::settings::Settings;
 use crate::status::StatusSignal;
 use super::Arpeggiator;
@@ -369,5 +370,92 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
 
     fn count_arpeggios(&self) -> usize {
         self.arpeggios.len()
+    }
+}
+
+pub struct PrerecordedSets<'a> {
+    midi_out: &'a midi::OutputDevice,
+    presets: Vec<Preset>,
+    notes: HashSet<Note>,
+    changed: bool,
+    playing: Option<Player>,
+}
+
+impl<'a> PrerecordedSets<'a> {
+    pub fn new(midi_out: &'a midi::OutputDevice, presets: Vec<Preset>) -> Self {
+        Self {
+            midi_out,
+            presets,
+            notes: HashSet::new(),
+            changed: false,
+            playing: None
+        }
+    }
+}
+
+impl<'a> PrerecordedSets<'a> {
+    const SEND_CHANNEL: Channel = Channel::Ch1;
+
+    fn find_preset(&self, notes: &HashSet<Note>) -> Option<usize> {
+        for i in 0..self.presets.len() {
+            if self.presets[i].is_triggered_by(&notes) {
+                return Some(i);
+            }
+        }
+        None
+    }
+}
+
+impl<'a> Arpeggiator for PrerecordedSets<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+        match received {
+            MidiMessage::NoteOn(_, n, _) => {
+                self.notes.insert(n);
+                self.changed = true;
+            },
+            MidiMessage::NoteOff(_, n, _) => {
+                self.notes.remove(&n);
+                self.changed = true;
+            },
+            MidiMessage::TimingClock => {
+                if self.changed {
+                    self.changed = false;
+                    if let Some(p) = self.find_preset(&self.notes) {
+                        if let Some(existing) = &mut self.playing {
+                            existing.force_stop()?;
+                        }
+                        let new_arp = Arpeggio::from_preset(&self.presets[p], Self::SEND_CHANNEL, U7::from_u8_lossy(settings.fixed_velocity.unwrap_or(100)), settings.finish_pattern);
+                        self.playing = Some(Player::init(new_arp, self.midi_out, &settings.double_notes));
+                        status.reset_beat();
+                    } else {
+                        if let Some(existing) = &mut self.playing {
+                            existing.stop();
+                        }
+                    }
+                }
+                if let Some(player) = &mut self.playing {
+                    if !player.play_tick()? {
+                        self.playing = None;
+                    }
+                }
+            },
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(player) = &mut self.playing {
+            player.stop();
+        }
+        Ok(())
+    }
+
+    fn count_arpeggios(&self) -> usize {
+        if self.playing.is_some() {
+            1
+        } else {
+            0
+        }
     }
 }

@@ -9,13 +9,14 @@ There are a number of types of arpeggiator:
 - MutatingHold: Hold down the notes (in order) which should be arpeggiated. Holding additional notes will update the arpeggio (without stopping it) so that extra notes can be added to the end of the arpeggio. Released notes will be removed from the arpeggio when the next update is trigged by holding an additional note. The playing arpeggio play back at 1 step per quarter note as per the MIDI clock-ticks being sent by the MIDI-OUT device, and will be stopped when all notes are released. Only one arpeggio is possible at a time in this mode.
 - EvenMutator: Similar to MutatingHold but notes are played in pitch order (rather than play order) and always at an even speed regardless of the number of notes in the arpeggio. This is helpful for fast/frequently changing arpeggios.
 - SyncedPedalRecorder: Similar to TimedPedalRecorder, except the timing is not recorded, just the notes. The recorded steps are then arpeggiated at 1 step per quarter note as per the MIDI clock-ticks being sent by the MIDI-OUT device.
+- PrerecordedSets: Trigger a predefined arpeggio based on a combination of held keys.
 
 For simplicity, the current CLI interface takes only 1 argument, the path to the SETTINGS file, which defaults to `settings.json`. The SETTINGS file is expected to be valid json representing a single or comma separated list of the settings objects described below. For ease of use, the surrounding `[` and `]` are implied and should not be included in the file.
 ```
 {
     "msb": 0-127, "lsb": 0-127, "pc": 1-128 // sets which program change will trigger this set of settings
     "finish_pattern": true/false, // determines if the arpeggio finishes playing its full set of steps (true), or stops immediately (false)
-    "mode": "Passthrough"/"RepeatRecorder"/"TimedPedalRecorder"/"PressHold"/"MutatingHold"/"EvenMutator"/"SyncedPedalRecorder", // as above
+    "mode": "Passthrough"/"RepeatRecorder"/"TimedPedalRecorder"/"PressHold"/"MutatingHold"/"EvenMutator"/"SyncedPedalRecorder"/"PrerecordedSets", // as above
     "pattern": "Up"/"Down", // determines the order the notes are played in the arpeggio
     "fixed_steps": 4, // optional, if set it must be a positive integer determining how many steps to divide the notes into
     "fixed_notes_per_step": 1, // optional, if set it must be a positive integer determining how many notes to allocate to each step

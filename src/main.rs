@@ -13,6 +13,8 @@ mod arpeggio;
 mod arpeggiator;
 mod settings;
 mod status;
+mod notename;
+mod presets;
 
 #[macro_use] extern crate serde_derive;
 
@@ -21,7 +23,7 @@ const DEFAULT_SETTINGS_FILE: &str = "settings.json";
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
     let settings_list = SettingsWithProgramInfo::load(args.next().unwrap_or(DEFAULT_SETTINGS_FILE.to_owned()))?;
-    let mut status = LedStatus::<8>::new(18); //TextStatus::_new(std::io::stdout())
+    let mut status = LedStatus::<8>::new(18); //TextStatus::_new(std::io::stdout());
     if let Some(midi_in) = args.next() {
         if let Some(midi_out) = args.next() {
             run(&midi_in, &midi_out, &settings_list, &mut status)
