@@ -13,6 +13,8 @@ mod arpeggio;
 mod arpeggiator;
 mod settings;
 mod status;
+mod notename;
+mod presets;
 
 #[macro_use] extern crate serde_derive;
 

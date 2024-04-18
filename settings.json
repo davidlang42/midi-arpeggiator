@@ -1,0 +1,3 @@
+{ "msb": 0, "lsb": 0, "pc": 2, "finish_pattern": true, "mode": "PrerecordedSets", "pattern": "Up", "presets": [
+    {"trigger": ["C4"], "steps": ["C4", "D4", "E4", "G4"]}
+]}

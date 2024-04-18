@@ -8,6 +8,7 @@ use wmidi::{MidiMessage, ControlFunction, U7, Channel};
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggiator::{Pattern, ArpeggiatorMode};
 use crate::midi::{MidiReceiver, self};
+use crate::presets::Preset;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Settings {
@@ -17,7 +18,8 @@ pub struct Settings {
     pub fixed_steps: Option<usize>, // assumed in 1 beat
     fixed_notes_per_step: Option<usize>,
     pub pattern: Pattern,
-    pub double_notes: Option<Vec<i8>>
+    pub double_notes: Option<Vec<i8>>,
+    pub presets: Option<Vec<Preset>>
 }
 
 impl Settings {
@@ -30,6 +32,7 @@ impl Settings {
             fixed_notes_per_step: None,
             pattern: Pattern::Up,
             double_notes: None,
+            presets: None
         }
     }
 

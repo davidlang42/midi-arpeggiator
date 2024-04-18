@@ -4,6 +4,7 @@ use wmidi::{ControlFunction, MidiMessage, U7};
 use strum_macros::EnumIter;
 
 use crate::arpeggio::{NoteDetails, Step};
+use crate::presets::Preset;
 use crate::status::StatusSignal;
 use crate::midi::{InputDevice, MidiReceiver, OutputDevice};
 use crate::settings::{Settings, SettingsGetter};
@@ -81,11 +82,12 @@ pub enum ArpeggiatorMode {
     PressHold,
     MutatingHold,
     SyncedPedalRecorder,
-    EvenMutator
+    EvenMutator,
+    PrerecordedSets
 }
 
 impl ArpeggiatorMode {
-    fn create<'a>(&self, midi_out: &'a OutputDevice) -> Box<dyn Arpeggiator + 'a> {
+    fn create<'a>(&self, midi_out: &'a OutputDevice, presets: &Option<Vec<Preset>>) -> Box<dyn Arpeggiator + 'a> {
         match self {
             Self::Passthrough => Box::new(Passthrough(midi_out)),
             Self::MutatingHold => Box::new(synced::MutatingHold::new(midi_out)),
@@ -93,7 +95,15 @@ impl ArpeggiatorMode {
             Self::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out)),
             Self::RepeatRecorder => Box::new(timed::RepeatRecorder::new(midi_out)),
             Self::SyncedPedalRecorder => Box::new(synced::PedalRecorder::new(midi_out)),
-            Self::EvenMutator => Box::new(full_length::EvenMutator::new(midi_out))
+            Self::EvenMutator => Box::new(full_length::EvenMutator::new(midi_out)),
+            Self::PrerecordedSets => {
+                if let Some(actual_presets) = presets {
+                    Box::new(synced::PrerecordedSets::new(midi_out, actual_presets.clone()))
+                } else {
+                    // not very useful, but better not to crash
+                    Box::new(synced::PrerecordedSets::new(midi_out, Vec::new()))
+                }
+            }
         }
     }
 }
@@ -112,7 +122,7 @@ impl<'a, SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<'a, SG, SS> {
 
     pub fn listen_with_midi_receivers(mut self, mut extra_midi_receivers: Vec<&mut dyn MidiReceiver>) -> Result<(), Box<dyn Error>> {
         let mut mode = self.settings.get().mode;
-        let mut current: Box<dyn Arpeggiator> = mode.create(&self.midi_out);
+        let mut current: Box<dyn Arpeggiator> = mode.create(&self.midi_out, &self.settings.get().presets);
         loop {
             let mut m = Some(self.midi_in.read()?);
             // pass message through extra receivers
@@ -129,7 +139,7 @@ impl<'a, SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<'a, SG, SS> {
             if new_mode != mode {
                 mode = new_mode;
                 current.stop_arpeggios()?;
-                current = new_mode.create(&self.midi_out);
+                current = new_mode.create(&self.midi_out, &self.settings.get().presets);
                 self.status.update_count(current.count_arpeggios());
             }
             // pass message through status
