@@ -83,7 +83,8 @@ pub enum ArpeggiatorMode {
     MutatingHold,
     SyncedPedalRecorder,
     EvenMutator,
-    PrerecordedSets
+    PrerecordedSets,
+    TriggeredChords,
 }
 
 impl ArpeggiatorMode {
@@ -102,6 +103,14 @@ impl ArpeggiatorMode {
                 } else {
                     // not very useful, but better not to crash
                     Box::new(synced::PrerecordedSets::new(midi_out, Vec::new()))
+                }
+            },
+            Self::TriggeredChords => {
+                if let Some(actual_presets) = presets {
+                    Box::new(full_length::TriggeredChords::new(midi_out, actual_presets.clone()))
+                } else {
+                    // not very useful, but better not to crash
+                    Box::new(full_length::TriggeredChords::new(midi_out, Vec::new()))
                 }
             }
         }
