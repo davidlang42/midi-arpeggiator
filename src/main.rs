@@ -24,30 +24,44 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
     let settings_list = SettingsWithProgramInfo::load(args.next().unwrap_or(DEFAULT_SETTINGS_FILE.to_owned()))?;
     let mut status = TextStatus::_new(std::io::stdout());
-    if let Some(midi_in) = args.next() {
-        if let Some(midi_out) = args.next() {
-            run(&midi_in, &midi_out, &settings_list, &mut status)
+    if let Some(midi_or_required_devices) = args.next() {
+        if let Ok(required_devices) = midi_or_required_devices.parse::<usize>() {
+            wait_for_midi_devices(required_devices, status, settings_list)
         } else {
-            run(&midi_in, &midi_in, &settings_list, &mut status)
+            let midi_in = midi_or_required_devices;
+            if let Some(midi_out) = args.next() {
+                run(&midi_in, &midi_out, &settings_list, &mut status)
+            } else {
+                run(&midi_in, &midi_in, &settings_list, &mut status)
+            }
         }
     } else {
-        loop {
-            let mut devices = list_files("/dev", "midi")?;
-            while devices.len() != 2 {
-                if devices.len() < 2 {
-                    status.waiting_for_midi_connect();
-                } else {
-                    status.waiting_for_midi_disconnect();
-                }
-                thread::sleep(Duration::from_millis(500));
-                devices = list_files("/dev", "midi")?;
+        wait_for_midi_devices(2, status, settings_list)
+    }
+}
+
+fn wait_for_midi_devices<S: StatusSignal>(required_devices: usize, mut status: S, settings_list: Vec<SettingsWithProgramInfo>) -> Result<(), Box<dyn Error>> {
+    if required_devices < 1 || required_devices > 2 {
+        panic!("required_devices out of range 1-2")
+    }
+    loop {
+        let mut devices = list_files("/dev", "midi")?;
+        while devices.len() != required_devices {
+            if devices.len() < required_devices {
+                status.waiting_for_midi_connect();
+            } else {
+                status.waiting_for_midi_disconnect();
             }
-            status.waiting_for_midi_clock();
-            if ClockDevice::init(&devices[0]).is_ok() {
-                run_and_print(&devices[1], &devices[0], &settings_list, &mut status);
-            } else if ClockDevice::init(&devices[1]).is_ok() {
-                run_and_print(&devices[0], &devices[1], &settings_list, &mut status);
-            }
+            thread::sleep(Duration::from_millis(500));
+            devices = list_files("/dev", "midi")?;
+        }
+        status.waiting_for_midi_clock();
+        if devices.len() == 1 {
+            run_and_print(&devices[0], &devices[0], &settings_list, &mut status);
+        } else if ClockDevice::init(&devices[0]).is_ok() {
+            run_and_print(&devices[1], &devices[0], &settings_list, &mut status);
+        } else if ClockDevice::init(&devices[1]).is_ok() {
+            run_and_print(&devices[0], &devices[1], &settings_list, &mut status);
         }
     }
 }
