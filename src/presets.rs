@@ -8,7 +8,7 @@ use crate::notename::NoteName;
 pub struct Preset {
     pub trigger: Vec<NoteName>,
     pub steps: Vec<NoteName>,
-    pub ticks_per_step: usize
+    pub ticks_per_step: Option<usize>
 }
 
 impl Preset {

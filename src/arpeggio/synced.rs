@@ -56,7 +56,7 @@ impl Arpeggio {
         }
         Self {
             steps,
-            ticks_per_step: preset.ticks_per_step,
+            ticks_per_step: preset.ticks_per_step.unwrap_or(1),
             finish_steps
         }
     }
