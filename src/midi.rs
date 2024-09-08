@@ -36,7 +36,7 @@ pub struct OutputDevice {
 pub const TICKS_PER_BEAT: usize = 24;
 
 impl InputDevice {
-    pub fn _open(midi_in: &str, include_clock_ticks: bool) -> Result<Self, Box<dyn Error>> {
+    pub fn open(midi_in: &str, include_clock_ticks: bool) -> Result<Self, Box<dyn Error>> {
         let (tx, rx) = mpsc::channel();
         let mut input = fs::File::options().read(true).open(midi_in).map_err(|e| format!("Cannot open MIDI IN '{}': {}", midi_in, e))?;
         let join_handle = thread::Builder::new().name(format!("midi-in")).spawn(move || Self::read_into_queue(&mut input, tx, include_clock_ticks, true))?;

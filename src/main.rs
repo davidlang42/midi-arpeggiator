@@ -77,7 +77,11 @@ fn run<SS: StatusSignal>(midi_in: &str, midi_out: &str, settings_list: &Vec<Sett
     println!("Starting arpeggiator with MIDI-IN: {}, MIDI-OUT: {}", midi_in, midi_out);
     let default_settings = Settings::passthrough();
     MultiArpeggiator {
-        midi_in: InputDevice::open_with_external_clock(&midi_in, &midi_out, true)?,
+        midi_in: if midi_in == midi_out {
+            InputDevice::open(&midi_in, true)?
+        } else {
+            InputDevice::open_with_external_clock(&midi_in, &midi_out, true)?
+        },
         midi_out: OutputDevice::open(&midi_out)?,
         settings: SpecificProgramChanges::new(settings_list, &default_settings),
         status
