@@ -130,8 +130,8 @@ impl<'a, SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<'a, SG, SS> {
     }
 
     pub fn listen_with_midi_receivers(mut self, mut extra_midi_receivers: Vec<&mut dyn MidiReceiver>) -> Result<(), Box<dyn Error>> {
-        let mut mode = self.settings.get().mode;
-        let mut current: Box<dyn Arpeggiator> = mode.create(&self.midi_out, &self.settings.get().presets);
+        let mut mode = self.settings.get().clone();
+        let mut current: Box<dyn Arpeggiator> = mode.mode.create(&self.midi_out, &self.settings.get().presets);
         loop {
             let mut m = Some(self.midi_in.read()?);
             // pass message through extra receivers
@@ -144,11 +144,11 @@ impl<'a, SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<'a, SG, SS> {
             m = self.settings.passthrough_midi(m.unwrap());
             // handle settings changes
             self.status.update_settings(self.settings.get());
-            let new_mode = self.settings.get().mode;
+            let new_mode = self.settings.get().clone();
             if new_mode != mode {
                 mode = new_mode;
                 current.stop_arpeggios()?;
-                current = new_mode.create(&self.midi_out, &self.settings.get().presets);
+                current = mode.mode.create(&self.midi_out, &self.settings.get().presets);
                 self.status.update_count(current.count_arpeggios());
             }
             // pass message through status
@@ -166,33 +166,7 @@ struct Passthrough<'a>(&'a OutputDevice);
 
 impl<'a> Passthrough<'a> {
     fn should_passthrough(message: &MidiMessage) -> bool {
-        match message {
-            // dont send patch changes
-            MidiMessage::ProgramChange(_, _) => false,
-            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT, _) => false,
-            MidiMessage::ControlChange(_, ControlFunction::BANK_SELECT_LSB, _) => false,
-            // do send notes and expression
-            MidiMessage::NoteOff(_, _, _) => true,
-            MidiMessage::NoteOn(_, _, _) => true,
-            MidiMessage::PolyphonicKeyPressure(_, _, _) => true,
-            MidiMessage::ControlChange(_, _, _) => true,
-            MidiMessage::ChannelPressure(_, _) => true,
-            MidiMessage::PitchBendChange(_, _) => true,
-            // dont send other weirdness
-            MidiMessage::SysEx(_) => false,
-            MidiMessage::OwnedSysEx(_) => false,
-            MidiMessage::MidiTimeCode(_) => false,
-            MidiMessage::SongPositionPointer(_) => false,
-            MidiMessage::SongSelect(_) => false,
-            MidiMessage::Reserved(_) => false,
-            MidiMessage::TuneRequest => false,
-            MidiMessage::TimingClock => false,
-            MidiMessage::Start => false,
-            MidiMessage::Continue => false,
-            MidiMessage::Stop => false,
-            MidiMessage::ActiveSensing => false,
-            MidiMessage::Reset => false
-        }
+false
     }
 }
 
