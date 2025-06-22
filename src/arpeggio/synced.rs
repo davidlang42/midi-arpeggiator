@@ -51,8 +51,8 @@ impl Arpeggio {
 
     pub fn from_preset(preset: &Preset, channel: Channel, velocity: Velocity, finish_steps: bool, notes_per_step: usize) -> Self {
         let mut steps = Vec::new();
-        for notes in &preset.steps.chunks(notes_per_step) {
-            steps.push(Step::notes(notes.map(|n| NoteDetails { c: channel, n: n.into(), v: velocity }).collect()));
+        for notes in preset.steps.chunks(notes_per_step) {
+            steps.push(Step::notes(notes.iter().map(|n| NoteDetails { c: channel, n: n.into(), v: velocity }).collect()));
         }
         Self {
             steps,
