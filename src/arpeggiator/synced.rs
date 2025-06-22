@@ -424,7 +424,7 @@ impl<'a> Arpeggiator for PrerecordedSets<'a> {
                         if let Some(existing) = &mut self.playing {
                             existing.force_stop()?;
                         }
-                        let new_arp = Arpeggio::from_preset(&self.presets[p], Self::SEND_CHANNEL, U7::from_u8_lossy(settings.fixed_velocity.unwrap_or(100)), settings.finish_pattern);
+                        let new_arp = Arpeggio::from_preset(&self.presets[p], Self::SEND_CHANNEL, U7::from_u8_lossy(settings.fixed_velocity.unwrap_or(100)), settings.finish_pattern, settings.fixed_notes_per_step.unwrap_or(1));
                         self.playing = Some(Player::init(new_arp, self.midi_out, &settings.double_notes));
                         status.reset_beat();
                     } else {
