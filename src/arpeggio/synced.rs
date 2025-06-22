@@ -79,7 +79,8 @@ pub struct Player {
     step: usize,
     last_step: OptionIndex<Step>,
     wait_ticks: usize,
-    pub should_stop: bool
+    pub should_stop: bool,
+    remaining_repeats: Option<usize>
 }
 
 enum OptionIndex<T> {
@@ -89,14 +90,15 @@ enum OptionIndex<T> {
 }
 
 impl Player {
-    pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, doubling: &Option<Vec<i8>>) -> Self {
+    pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, doubling: &Option<Vec<i8>>, max_repeats: Option<usize>) -> Self {
         Self {
             arpeggio,
             step: 0,
             wait_ticks: 0,
             should_stop: false,
             last_step: OptionIndex::None,
-            midi_out: midi_out.with_doubling(doubling)
+            midi_out: midi_out.with_doubling(doubling),
+            remaining_repeats: max_repeats
         }
     }
 
@@ -118,13 +120,16 @@ impl Player {
         }
         if self.wait_ticks == 0 {
             self.last_step_off()?;
-            if self.should_stop && self.step == 0 {
+            if self.step == 0 && (self.should_stop || self.remaining_repeats == Some(0)) {
                 return Ok(false);
             }
             self.arpeggio.steps[self.step].send_on(&self.midi_out)?;
             self.last_step = OptionIndex::SomeIndex(self.step);
             if self.step == self.arpeggio.steps.len() - 1 {
                 self.step = 0;
+                if let Some(remaining) = self.remaining_repeats {
+                    self.remaining_repeats = Some(remaining - 1);
+                }
             } else {
                 self.step += 1;
             }
