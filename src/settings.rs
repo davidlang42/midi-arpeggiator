@@ -16,10 +16,11 @@ pub struct Settings {
     pub fixed_velocity: Option<u8>,
     pub mode: ArpeggiatorMode,
     pub fixed_steps: Option<usize>, // assumed in 1 beat
-    fixed_notes_per_step: Option<usize>,
+    pub fixed_notes_per_step: Option<usize>,
     pub pattern: Pattern,
     pub double_notes: Option<Vec<i8>>,
-    pub presets: Option<Vec<Preset>>
+    pub presets: Option<Vec<Preset>>,
+    pub max_repeats: Option<usize>
 }
 
 impl Settings {
@@ -32,7 +33,8 @@ impl Settings {
             fixed_notes_per_step: None,
             pattern: Pattern::Up,
             double_notes: None,
-            presets: None
+            presets: None,
+            max_repeats: None
         }
     }
 
