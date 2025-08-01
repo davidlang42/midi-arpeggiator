@@ -130,8 +130,8 @@ impl<'a, SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<'a, SG, SS> {
     }
 
     pub fn listen_with_midi_receivers(mut self, mut extra_midi_receivers: Vec<&mut dyn MidiReceiver>) -> Result<(), Box<dyn Error>> {
-        let mut mode = self.settings.get().mode;
-        let mut current: Box<dyn Arpeggiator> = mode.create(&self.midi_out, &self.settings.get().presets);
+        let mut existing_settings = self.settings.get().clone();
+        let mut arpeggiator: Box<dyn Arpeggiator> = existing_settings.mode.create(&self.midi_out, &self.settings.get().presets);
         loop {
             let mut m = Some(self.midi_in.read()?);
             // pass message through extra receivers
@@ -144,20 +144,20 @@ impl<'a, SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<'a, SG, SS> {
             m = self.settings.passthrough_midi(m.unwrap());
             // handle settings changes
             self.status.update_settings(self.settings.get());
-            let new_mode = self.settings.get().mode;
-            if new_mode != mode {
-                mode = new_mode;
-                current.stop_arpeggios()?;
-                current = new_mode.create(&self.midi_out, &self.settings.get().presets);
-                self.status.update_count(current.count_arpeggios());
+            let new_settings = self.settings.get().clone();
+            if new_settings != existing_settings {
+                existing_settings = new_settings;
+                arpeggiator.stop_arpeggios()?;
+                arpeggiator = existing_settings.mode.create(&self.midi_out, &self.settings.get().presets);
+                self.status.update_count(arpeggiator.count_arpeggios());
             }
             // pass message through status
             if m.is_none() { continue; }
             m = self.status.passthrough_midi(m.unwrap());
             // process message in arp
             if m.is_none() { continue; }
-            current.process(m.unwrap(), self.settings.get(), self.status)?;
-            self.status.update_count(current.count_arpeggios());
+            arpeggiator.process(m.unwrap(), self.settings.get(), self.status)?;
+            self.status.update_count(arpeggiator.count_arpeggios());
         }
     }
 }
