@@ -20,7 +20,8 @@ pub struct Settings {
     pub pattern: Pattern,
     pub double_notes: Option<Vec<i8>>,
     pub presets: Option<Vec<Preset>>,
-    pub max_repeats: Option<usize>
+    pub max_repeats: Option<usize>,
+    pub use_pedal: Option<bool>
 }
 
 impl Settings {
@@ -34,7 +35,8 @@ impl Settings {
             pattern: Pattern::Up,
             double_notes: None,
             presets: None,
-            max_repeats: None
+            max_repeats: None,
+            use_pedal: None
         }
     }
 
