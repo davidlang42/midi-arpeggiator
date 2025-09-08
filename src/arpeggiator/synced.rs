@@ -379,6 +379,7 @@ pub struct PrerecordedSets<'a> {
     notes: HashSet<Note>,
     changed: bool,
     playing: Option<Player>,
+    pedal: bool,
 }
 
 impl<'a> PrerecordedSets<'a> {
@@ -388,7 +389,8 @@ impl<'a> PrerecordedSets<'a> {
             presets,
             notes: HashSet::new(),
             changed: false,
-            playing: None
+            playing: None,
+            pedal: false,
         }
     }
 }
@@ -409,6 +411,9 @@ impl<'a> PrerecordedSets<'a> {
 impl<'a> Arpeggiator for PrerecordedSets<'a> {
     fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
+            MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
+                self.pedal = u8::from(value) >= 64;
+            },
             MidiMessage::NoteOn(_, n, _) => {
                 self.notes.insert(n);
                 self.changed = true;
@@ -418,7 +423,8 @@ impl<'a> Arpeggiator for PrerecordedSets<'a> {
                 self.changed = true;
             },
             MidiMessage::TimingClock => {
-                if self.changed {
+                let dont_change_because_pedal = settings.use_pedal == Some(true) && self.pedal;
+                if self.changed && !dont_change_because_pedal {
                     self.changed = false;
                     if let Some(p) = self.find_preset(&self.notes) {
                         if let Some(existing) = &mut self.playing {
