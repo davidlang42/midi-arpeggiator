@@ -1,12 +1,23 @@
-use std::cmp::min;
 use std::io::Write;
-
-use crate::arpeggiator::{ArpeggiatorMode, Pattern};
 use crate::settings::Settings;
-use crate::midi::{self, MidiReceiver};
+use crate::midi::MidiReceiver;
 
-use smart_leds::{SmartLedsWrite, RGB8};
+#[cfg(feature = "led")]
+use std::cmp::min;
+
+#[cfg(feature = "led")]
+use crate::arpeggiator::{ArpeggiatorMode, Pattern};
+
+#[cfg(feature = "led")]
+use crate::midi;
+
+#[cfg(feature = "led")]
 use wmidi::MidiMessage;
+
+#[cfg(feature = "led")]
+use smart_leds::{SmartLedsWrite, RGB8};
+
+#[cfg(feature = "led")]
 use ws281x_rpi::Ws2812Rpi;
 
 pub trait StatusSignal: MidiReceiver {
@@ -96,6 +107,7 @@ impl<W: Write> StatusSignal for TextStatus<W> {
     }
 }
 
+#[cfg(feature = "led")]
 pub struct LedStatus<const N: usize> {
     driver: Ws2812Rpi,
     tick: usize,
@@ -105,6 +117,7 @@ pub struct LedStatus<const N: usize> {
     waiting: Option<(WaitFor, usize)>
 }
 
+#[cfg(feature = "led")]
 impl<const N: usize> LedStatus<N> {
     pub fn new(pin: u8) -> Self {
         let mut status = Self {
@@ -172,6 +185,7 @@ impl<const N: usize> LedStatus<N> {
     }
 }
 
+#[cfg(feature = "led")]
 impl<const N: usize> MidiReceiver for LedStatus<N> {
     fn passthrough_midi(&mut self, message: wmidi::MidiMessage<'static>) -> Option<wmidi::MidiMessage<'static>> {
         if let MidiMessage::TimingClock = message {
@@ -186,6 +200,7 @@ impl<const N: usize> MidiReceiver for LedStatus<N> {
     }
 }
 
+#[cfg(feature = "led")]
 impl<const N: usize> StatusSignal for LedStatus<N> {
     fn update_settings(&mut self, settings: &Settings) {
         self.clear_wait();
