@@ -5,8 +5,19 @@ use std::error::Error;
 use arpeggiator::MultiArpeggiator;
 use settings::{Settings, SettingsWithProgramInfo, SpecificProgramChanges};
 use midi::{InputDevice, OutputDevice, ClockDevice};
-use status::{LedStatus, StatusSignal};
-//use crate::status::TextStatus;
+use status::StatusSignal;
+
+#[cfg(feature = "led")]
+use crate::status::LedStatus;
+
+#[cfg(feature = "text")]
+use crate::status::TextStatus;
+
+#[cfg(all(feature = "led", feature = "text"))]
+compile_error!("Cannot enable both 'led' and 'text' features at the same time. Choose one.");
+
+#[cfg(not(any(feature = "led", feature = "text")))]
+compile_error!("You must specify a status backend. Enable either the 'led' or 'text' feature.");
 
 mod midi;
 mod arpeggio;
@@ -23,7 +34,13 @@ const DEFAULT_SETTINGS_FILE: &str = "settings.json";
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
     let settings_list = SettingsWithProgramInfo::load(args.next().unwrap_or(DEFAULT_SETTINGS_FILE.to_owned()))?;
-    let mut status = LedStatus::<8>::new(18); //TextStatus::_new(std::io::stdout());
+
+    #[cfg(feature = "led")]
+    let mut status = LedStatus::<8>::new(18);
+
+    #[cfg(feature = "text")]
+    let mut status = TextStatus::_new(std::io::stdout());
+
     if let Some(midi_or_required_devices) = args.next() {
         if let Ok(required_devices) = midi_or_required_devices.parse::<usize>() {
             wait_for_midi_devices(required_devices, status, settings_list)
