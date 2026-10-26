@@ -34,6 +34,7 @@ pub struct OutputDevice {
 }
 
 pub const TICKS_PER_BEAT: usize = 24;
+pub const CHANNELS: usize = 16;
 
 impl InputDevice {
     pub fn open(midi_in: &str, include_clock_ticks: bool) -> Result<Self, Box<dyn Error>> {

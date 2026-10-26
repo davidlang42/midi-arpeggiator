@@ -1,6 +1,7 @@
 use std::io::Write;
 use crate::settings::Settings;
 use crate::midi::MidiReceiver;
+use wmidi::Channel;
 
 #[cfg(feature = "led")]
 use std::cmp::min;
@@ -22,15 +23,15 @@ use ws281x_rpi::Ws2812Rpi;
 
 pub trait StatusSignal: MidiReceiver {
     fn update_settings(&mut self, settings: &Settings);
-    fn update_count(&mut self, arpeggios: usize);
-    fn reset_beat(&mut self);
+    fn update_count(&mut self, channel: Channel, arpeggios: usize);
+    fn reset_beat(&mut self, channel: Channel);
     fn waiting_for_midi_connect(&mut self);
     fn waiting_for_midi_disconnect(&mut self);
     fn waiting_for_midi_clock(&mut self);
 }
 
 pub struct TextStatus<W: Write> {
-    count: Option<usize>,
+    counts: [usize; 16],
     settings: Option<Settings>,
     waiting: Option<WaitFor>,
     writer: W
@@ -46,7 +47,7 @@ enum WaitFor {
 impl<W: Write> TextStatus<W> {
     pub fn _new(writer: W) -> Self {
         Self {
-            count: None,
+            counts: [0; 16],
             settings: None,
             waiting: None,
             writer
@@ -83,15 +84,17 @@ impl<W: Write> StatusSignal for TextStatus<W> {
         }
     }
 
-    fn update_count(&mut self, arpeggios: usize) {
-        if self.count.is_none() || self.count.unwrap() != arpeggios {
-            self.count = Some(arpeggios);
-            writeln!(self.writer, "Arpeggio count: {}", self.count.unwrap()).unwrap();
+    fn update_count(&mut self, channel: Channel, arpeggios: usize) {
+        let idx = channel.index() as usize;
+        if idx < 16 && self.counts[idx] != arpeggios {
+            self.counts[idx] = arpeggios;
+            writeln!(self.writer, "[Ch {}] Arpeggio count: {}", idx + 1, arpeggios).unwrap();
         }
     }
 
-    fn reset_beat(&mut self) {
-        writeln!(self.writer, "**Reset beat**").unwrap();
+    fn reset_beat(&mut self, channel: Channel) {
+        let idx = channel.index() as usize;
+        writeln!(self.writer, "[Ch {}] **Reset beat**", idx + 1).unwrap();
     }
     
     fn waiting_for_midi_connect(&mut self) {
@@ -108,7 +111,7 @@ impl<W: Write> StatusSignal for TextStatus<W> {
 }
 
 #[cfg(feature = "led")]
-pub struct LedStatus<const N: usize> {
+pub struct GlobalLedStatus<const N: usize> {
     driver: Ws2812Rpi,
     tick: usize,
     running: bool, // runs green if true, red if false
@@ -118,7 +121,7 @@ pub struct LedStatus<const N: usize> {
 }
 
 #[cfg(feature = "led")]
-impl<const N: usize> LedStatus<N> {
+impl<const N: usize> GlobalLedStatus<N> {
     pub fn new(pin: u8) -> Self {
         let mut status = Self {
             driver: Ws2812Rpi::new(N as i32, pin as i32).unwrap(),
@@ -186,7 +189,7 @@ impl<const N: usize> LedStatus<N> {
 }
 
 #[cfg(feature = "led")]
-impl<const N: usize> MidiReceiver for LedStatus<N> {
+impl<const N: usize> MidiReceiver for GlobalLedStatus<N> {
     fn passthrough_midi(&mut self, message: wmidi::MidiMessage<'static>) -> Option<wmidi::MidiMessage<'static>> {
         if let MidiMessage::TimingClock = message {
             if self.tick == midi::TICKS_PER_BEAT - 1 {
@@ -201,7 +204,7 @@ impl<const N: usize> MidiReceiver for LedStatus<N> {
 }
 
 #[cfg(feature = "led")]
-impl<const N: usize> StatusSignal for LedStatus<N> {
+impl<const N: usize> StatusSignal for GlobalLedStatus<N> {
     fn update_settings(&mut self, settings: &Settings) {
         self.clear_wait();
         if settings.mode == ArpeggiatorMode::Passthrough {
@@ -213,11 +216,144 @@ impl<const N: usize> StatusSignal for LedStatus<N> {
         }
     }
 
-    fn update_count(&mut self, arpeggios: usize) {
+    fn update_count(&mut self, _channel: Channel, arpeggios: usize) {
         self.running = arpeggios > 0;
     }
 
-    fn reset_beat(&mut self) {
+    fn reset_beat(&mut self, _channel: Channel) {
+        self.tick = 0;
+    }
+    
+    fn waiting_for_midi_connect(&mut self) {
+        self.show_wait(WaitFor::Connect);
+    }
+    
+    fn waiting_for_midi_disconnect(&mut self) {
+        self.show_wait(WaitFor::Disconnect);
+    }
+    
+    fn waiting_for_midi_clock(&mut self) {
+        self.show_wait(WaitFor::Clock);
+    }
+}
+
+#[cfg(feature = "led")]
+pub struct ChannelHueLedStatus<const N: usize> {
+    driver: Ws2812Rpi,
+    tick: usize,
+    counts: [usize; 16],
+    fixed_steps: Option<usize>,
+    pattern: Option<Pattern>,
+    waiting: Option<(WaitFor, usize)>
+}
+
+#[cfg(feature = "led")]
+impl<const N: usize> ChannelHueLedStatus<N> {
+    pub fn new(pin: u8) -> Self {
+        let mut status = Self {
+            driver: Ws2812Rpi::new(N as i32, pin as i32).unwrap(),
+            tick: 0,
+            counts: [0; 16],
+            fixed_steps: None,
+            pattern: None,
+            waiting: None
+        };
+        status.update_leds();
+        status
+    }
+
+    fn channel_color(channel_idx: usize) -> RGB8 {
+        // Simple distinct hue mapping based on channel index (0..15)
+        match channel_idx % 6 {
+            0 => RGB8::new(0, 64, 0),   // Green
+            1 => RGB8::new(0, 0, 64),   // Blue
+            2 => RGB8::new(64, 64, 0),  // Yellow
+            3 => RGB8::new(0, 64, 64),  // Cyan
+            4 => RGB8::new(64, 0, 64),  // Magenta
+            _ => RGB8::new(64, 32, 0),  // Orange
+        }
+    }
+
+    fn update_leds(&mut self) {
+        let mut data: [RGB8; N] = [RGB8::default(); N];
+        if let Some(steps) = self.fixed_steps {
+            for i in 0..min(data.len(), steps) {
+                data[i] = RGB8::new(16, 16, 16);
+            }
+        }
+        // Display active channels on the strip or highlight based on running status
+        let active_channels: Vec<usize> = self.counts.iter().enumerate().filter(|(_, &c)| c > 0).map(|(i, _)| i).collect();
+        if !active_channels.is_empty() {
+            let progress = self.tick * data.len() / midi::TICKS_PER_BEAT;
+            if progress < data.len() {
+                let ch_idx = active_channels[self.tick % active_channels.len()];
+                data[progress] = Self::channel_color(ch_idx);
+            }
+        }
+        self.driver.write(data.into_iter()).unwrap();
+    }
+
+    fn show_wait(&mut self, wait_for: WaitFor) {
+        let new_index = match self.waiting {
+            None => 0,
+            Some((different, _)) if different != wait_for => 0,
+            Some((_same, c)) if c == N - 1 => 0,
+            Some((_same, c)) => c + 1
+        };
+        let new_color = match wait_for {
+            WaitFor::Connect => RGB8::new(0, 64, 0),
+            WaitFor::Disconnect => RGB8::new(64, 0, 0),
+            WaitFor::Clock => RGB8::new(64, 41, 0)
+        };
+        let mut data: [RGB8; N] = [RGB8::default(); N];
+        for i in 0..(new_index + 1) {
+            data[i] = new_color;
+        }
+        self.driver.write(data.into_iter()).unwrap();
+        self.waiting = Some((wait_for, new_index));
+    }
+
+    fn clear_wait(&mut self) {
+        self.waiting = None;
+    }
+}
+
+#[cfg(feature = "led")]
+impl<const N: usize> MidiReceiver for ChannelHueLedStatus<N> {
+    fn passthrough_midi(&mut self, message: wmidi::MidiMessage<'static>) -> Option<wmidi::MidiMessage<'static>> {
+        if let MidiMessage::TimingClock = message {
+            if self.tick == midi::TICKS_PER_BEAT - 1 {
+                self.tick = 0;
+            } else {
+                self.tick += 1;
+            }
+            self.update_leds();
+        }
+        Some(message)
+    }
+}
+
+#[cfg(feature = "led")]
+impl<const N: usize> StatusSignal for ChannelHueLedStatus<N> {
+    fn update_settings(&mut self, settings: &Settings) {
+        self.clear_wait();
+        if settings.mode == ArpeggiatorMode::Passthrough {
+            self.fixed_steps = None;
+            self.pattern = None;
+        } else {
+            self.fixed_steps = settings.fixed_steps;
+            self.pattern = Some(settings.pattern);
+        }
+    }
+
+    fn update_count(&mut self, channel: Channel, arpeggios: usize) {
+        let idx = u8::from(channel) as usize;
+        if idx < 16 {
+            self.counts[idx] = arpeggios;
+        }
+    }
+
+    fn reset_beat(&mut self, _channel: Channel) {
         self.tick = 0;
     }
     

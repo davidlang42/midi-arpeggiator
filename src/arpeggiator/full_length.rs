@@ -12,6 +12,7 @@ use super::Arpeggiator;
 
 pub struct EvenMutator<'a> {
     midi_out: &'a midi::OutputDevice,
+    channel: Channel,
     arpeggio: State
 }
 
@@ -22,9 +23,10 @@ enum State {
 }
 
 impl<'a> EvenMutator<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, channel: Channel) -> Self {
         Self {
             midi_out,
+            channel,
             arpeggio: State::None
         }
     }
@@ -66,7 +68,7 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
                         let mut temp = State::None;
                         mem::swap(&mut self.arpeggio, &mut temp);
                         if let State::Starting(arp, _) = temp {
-                            let mut player = Player::init(arp, self.midi_out, &settings.double_notes);
+                            let mut player = Player::init(arp, self.midi_out, &settings.double_notes, self.channel);
                             self.arpeggio = if player.play_tick()? {
                                 State::Playing(player)
                             } else {
@@ -75,7 +77,7 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
                         } else {
                             panic!()
                         }
-                        status.reset_beat();
+                        status.reset_beat(self.channel);
                     },
                     State::Starting(_, n) => {
                         *n -= 1;
@@ -85,6 +87,7 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
             },
             _ => {}
         }
+        status.update_count(self.channel, self.count_arpeggios());
         Ok(())
     }
 
@@ -107,15 +110,17 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
 
 pub struct TriggeredChords<'a> {
     midi_out: &'a midi::OutputDevice,
+    channel: Channel,
     not_playing: HashSet<Preset>,
     notes: HashSet<Note>,
     playing: HashSet<Preset>,
 }
 
 impl<'a> TriggeredChords<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, presets: Vec<Preset>) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, presets: Vec<Preset>, channel: Channel) -> Self {
         Self {
             midi_out,
+            channel,
             not_playing: HashSet::from_iter(presets),
             notes: HashSet::new(),
             playing: HashSet::new()
@@ -124,19 +129,17 @@ impl<'a> TriggeredChords<'a> {
 }
 
 impl<'a> TriggeredChords<'a> {
-    const SEND_CHANNEL: Channel = Channel::Ch1;
-
-    fn play(midi_out: &midi::OutputDevice, preset: &Preset, velocity: &Velocity) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+    fn play(&self, midi_out: &midi::OutputDevice, preset: &Preset, velocity: &Velocity) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         for n in preset.steps.iter() {
-            let message = MidiMessage::NoteOn(Self::SEND_CHANNEL, n.into(), *velocity);
+            let message = MidiMessage::NoteOn(self.channel, n.into(), *velocity);
             midi_out.send(message)?;
         }
         Ok(())
     }
 
-    fn stop(midi_out: &midi::OutputDevice, preset: &Preset) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+    fn stop(&self, midi_out: &midi::OutputDevice, preset: &Preset) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         for n in preset.steps.iter() {
-            let message = MidiMessage::NoteOff(Self::SEND_CHANNEL, n.into(), U7::MIN);
+            let message = MidiMessage::NoteOff(self.channel, n.into(), U7::MIN);
             midi_out.send(message)?;
         }
         Ok(())
@@ -154,9 +157,9 @@ impl<'a> Arpeggiator for TriggeredChords<'a> {
                 }
                 for p in should_play {
                     self.not_playing.remove(&p);
-                    Self::play(self.midi_out, &p, &v)?;
+                    self.play(self.midi_out, &p, &v)?;
                     self.playing.insert(p);
-                    status.reset_beat();
+                    status.reset_beat(self.channel);
                 }
             },
             MidiMessage::NoteOff(_, n, _) => {
@@ -164,18 +167,19 @@ impl<'a> Arpeggiator for TriggeredChords<'a> {
                 let should_stop: Vec<Preset> = self.playing.iter().filter(|p| !p.is_triggered_by(&self.notes)).cloned().collect();
                 for p in should_stop {
                     self.playing.remove(&p);
-                    Self::stop(self.midi_out, &p)?;
+                    self.stop(self.midi_out, &p)?;
                     self.not_playing.insert(p);
                 }
             },
             _ => {}
         };
+        status.update_count(self.channel, self.count_arpeggios());
         Ok(())
     }
 
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
         for p in self.playing.drain() {
-            Self::stop(self.midi_out, &p)?;
+            self.stop(self.midi_out, &p)?;
             self.not_playing.insert(p);
         }
         Ok(())

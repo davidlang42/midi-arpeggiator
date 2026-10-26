@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::mem;
 use std::time::Instant;
-use wmidi::{Note, MidiMessage, ControlFunction};
+use wmidi::{Channel, Note, MidiMessage, ControlFunction};
 use crate::status::StatusSignal;
 use crate::midi;
 use crate::arpeggio::NoteDetails;
@@ -12,15 +12,17 @@ use super::Arpeggiator;
 
 pub struct RepeatRecorder<'a> {
     midi_out: &'a midi::OutputDevice,
+    channel: Channel,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     last_note_off: Option<(Instant, NoteDetails)>,
     arpeggios: HashMap<Note, Player>
 }
 
 impl<'a> RepeatRecorder<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, channel: Channel) -> Self {
         Self {
             midi_out,
+            channel,
             held_notes: HashMap::new(),
             last_note_off: None,
             arpeggios: HashMap::new()
@@ -40,7 +42,7 @@ impl<'a> Arpeggiator for RepeatRecorder<'a> {
                         notes.sort_by(|(a, _), (b, _)| a.cmp(&b));
                         let arp = Arpeggio::from(notes, finish, settings.finish_pattern);
                         self.arpeggios.insert(n, Player::start(arp, &self.midi_out, &settings.double_notes)?);
-                        status.reset_beat();
+                        status.reset_beat(self.channel);
                     },
                     _ => {
                         self.held_notes.insert(n, (Instant::now(), NoteDetails::new(c, n, v, settings.fixed_velocity)));
@@ -63,6 +65,7 @@ impl<'a> Arpeggiator for RepeatRecorder<'a> {
             },
             _ => {}
         }
+        status.update_count(self.channel, self.count_arpeggios());
         Ok(())
     }
 
@@ -77,6 +80,7 @@ impl<'a> Arpeggiator for RepeatRecorder<'a> {
 
 pub struct PedalRecorder<'a> {
     midi_out: &'a midi::OutputDevice,
+    channel: Channel,
     notes: Vec<(Instant, NoteDetails)>,
     thru_notes: HashMap<Note, NoteDetails>,
     pedal: bool,
@@ -85,9 +89,10 @@ pub struct PedalRecorder<'a> {
 }
 
 impl<'a> PedalRecorder<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, channel: Channel) -> Self {
         Self {
             midi_out,
+            channel,
             notes: Vec::new(),
             thru_notes: HashMap::new(),
             pedal: false,
@@ -103,7 +108,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 if u8::from(value) >= 64 {
                     self.pedal = true;
-                    status.reset_beat();
+                    status.reset_beat(self.channel);
                     self.recorded = None;
                     drain_and_stop(&mut self.arpeggios);
                 } else {
@@ -123,7 +128,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                         let original = arp.first_note();
                         let new_arp = arp.transpose(original, original);
                         self.arpeggios.insert(original, Player::start(new_arp, &self.midi_out, &settings.double_notes)?);
-                        status.reset_beat();
+                        status.reset_beat(self.channel);
                     }
                 }
             },
@@ -141,7 +146,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                     let original = arp.first_note();
                     let new_arp = arp.transpose(original, n);
                     self.arpeggios.insert(n, Player::start(new_arp, &self.midi_out, &settings.double_notes)?);
-                    status.reset_beat();
+                    status.reset_beat(self.channel);
                 }
             },
             MidiMessage::NoteOff(_, n, _) => {
@@ -161,6 +166,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
             },
             _ => {}
         }
+        status.update_count(self.channel, self.count_arpeggios());
         Ok(())
     }
 
