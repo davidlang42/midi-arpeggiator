@@ -42,6 +42,7 @@ enum WaitFor {
     Clock
 }
 
+#[allow(dead_code)]
 impl<W: Write> TextStatus<W> {
     pub fn new(writer: W, default_settings: &Settings) -> Self {
         Self {
