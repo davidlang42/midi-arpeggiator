@@ -31,6 +31,9 @@ mod presets;
 #[cfg(not(feature = "unix"))]
 mod nonblock_win;
 
+#[cfg(not(feature = "led"))]
+mod ws281x_rpi_stub;
+
 #[macro_use] extern crate serde_derive;
 
 const DEFAULT_SETTINGS_FILE: &str = "settings.json";
