@@ -1,13 +1,13 @@
+use std::array;
 use std::error::Error;
-use wmidi::{ControlFunction, MidiMessage, U7};
+use wmidi::{Channel, ControlFunction, MidiMessage, U7};
 
 use strum_macros::EnumIter;
 
 use crate::arpeggio::{NoteDetails, Step};
-use crate::presets::Preset;
 use crate::status::StatusSignal;
-use crate::midi::{InputDevice, MidiReceiver, OutputDevice};
-use crate::settings::{Settings, SettingsGetter};
+use crate::midi::{self, InputDevice, OutputDevice};
+use crate::settings::{Settings, SettingsChanger};
 
 pub mod timed;
 pub mod synced;
@@ -69,7 +69,7 @@ impl Pattern {
 }
 
 pub trait Arpeggiator {
-    fn process(&mut self, message: MidiMessage<'static>, settings: &Settings, signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>>;
+    fn process(&mut self, message: MidiMessage<'static>, signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>>;
     fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>>;
     fn count_arpeggios(&self) -> usize;
 }
@@ -87,92 +87,123 @@ pub enum ArpeggiatorMode {
     TriggeredChords,
 }
 
-impl ArpeggiatorMode {
-    fn create<'a>(&self, midi_out: &'a OutputDevice, presets: &Option<Vec<Preset>>, output_device_is_input_device: bool) -> Box<dyn Arpeggiator + 'a> {
-        match self {
-            Self::Passthrough => Box::new(Passthrough::new(midi_out, output_device_is_input_device)),
-            Self::MutatingHold => Box::new(synced::MutatingHold::new(midi_out)),
-            Self::PressHold => Box::new(synced::PressHold::new(midi_out)),
-            Self::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out)),
-            Self::RepeatRecorder => Box::new(timed::RepeatRecorder::new(midi_out)),
-            Self::SyncedPedalRecorder => Box::new(synced::PedalRecorder::new(midi_out)),
-            Self::EvenMutator => Box::new(full_length::EvenMutator::new(midi_out)),
-            Self::PrerecordedSets => {
-                if let Some(actual_presets) = presets {
-                    Box::new(synced::PrerecordedSets::new(midi_out, actual_presets.clone()))
-                } else {
-                    // not very useful, but better not to crash
-                    Box::new(synced::PrerecordedSets::new(midi_out, Vec::new()))
-                }
+fn create_arpeggiator<'a>(settings: &Settings, midi_out: &'a OutputDevice, channel_out: Channel, output_device_is_input_device: bool) -> Box<dyn Arpeggiator + 'a> {
+    match settings.mode {
+        ArpeggiatorMode::Passthrough => Box::new(Passthrough::new(midi_out, output_device_is_input_device, settings)), // doesn't respect channel_out, always passes through input channel
+        ArpeggiatorMode::MutatingHold => Box::new(synced::MutatingHold::new(midi_out, channel_out, settings)),
+        ArpeggiatorMode::PressHold => Box::new(synced::PressHold::new(midi_out, channel_out, settings)),
+        ArpeggiatorMode::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out, channel_out, settings)),
+        ArpeggiatorMode::RepeatRecorder => Box::new(timed::RepeatRecorder::new(midi_out, channel_out, settings)),
+        ArpeggiatorMode::SyncedPedalRecorder => Box::new(synced::PedalRecorder::new(midi_out, channel_out, settings)),
+        ArpeggiatorMode::EvenMutator => Box::new(full_length::EvenMutator::new(midi_out, channel_out, settings)),
+        ArpeggiatorMode::PrerecordedSets => Box::new(synced::PrerecordedSets::new(midi_out, channel_out, settings)),
+        ArpeggiatorMode::TriggeredChords => Box::new(full_length::TriggeredChords::new(midi_out, channel_out, settings))
+    }
+}
+
+fn get_channel(message: &MidiMessage) -> Option<Channel> {
+    match message {
+        MidiMessage::NoteOff(c, _, _) => Some(*c),
+        MidiMessage::NoteOn(c, _, _) => Some(*c),
+        MidiMessage::PolyphonicKeyPressure(c, _, _) => Some(*c),
+        MidiMessage::ControlChange(c, _, _) => Some(*c),
+        MidiMessage::ProgramChange(c, _) => Some(*c),
+        MidiMessage::ChannelPressure(c, _) => Some(*c),
+        MidiMessage::PitchBendChange(c, _) => Some(*c),
+        _ => None,
+    }
+}
+
+pub struct MultiArpeggiator<'a, SC: SettingsChanger, SS: StatusSignal> {
+    midi_in: InputDevice,
+    midi_out: OutputDevice,
+    output_device_is_input_device: bool,
+    settings_changer: SC,
+    status: &'a mut SS,
+}
+
+impl<'a, SC: SettingsChanger, SS: StatusSignal> MultiArpeggiator<'a, SC, SS> {
+    pub fn new(midi_in: &str, midi_out: &str, settings_changer: SC, status: &'a mut SS) -> Result<Self, Box<dyn Error>> {
+        
+        let output_device_is_input_device = midi_in == midi_out;
+        Ok(Self {
+            midi_in: if output_device_is_input_device {
+                InputDevice::open(&midi_in, true)?
+            } else {
+                InputDevice::open_with_external_clock(&midi_in, &midi_out, true)?
             },
-            Self::TriggeredChords => {
-                if let Some(actual_presets) = presets {
-                    Box::new(full_length::TriggeredChords::new(midi_out, actual_presets.clone()))
-                } else {
-                    // not very useful, but better not to crash
-                    Box::new(full_length::TriggeredChords::new(midi_out, Vec::new()))
+            midi_out: OutputDevice::open(&midi_out)?,
+            output_device_is_input_device,
+            settings_changer,
+            status,
+        })
+    }
+
+    pub fn listen(mut self) -> Result<(), Box<dyn Error>> {
+        let mut changers: [SC; midi::CHANNELS] = array::from_fn(|_| self.settings_changer.clone());
+        let default_settings = self.settings_changer.get_default();
+        let mut arpeggiators: [Box<dyn Arpeggiator>; midi::CHANNELS] = [
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch1, self.output_device_is_input_device), //TODO ideally loop
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch2, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch3, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch4, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch5, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch6, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch7, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch8, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch9, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch10, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch11, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch12, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch13, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch14, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch15, self.output_device_is_input_device),
+            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch16, self.output_device_is_input_device)
+        ];
+        
+        loop {
+            // read next midi message
+            let message = self.midi_in.read()?;
+            if let Some(channel) = get_channel(&message) {
+                // process channel specific messages through settings -> status -> arpeggiator
+                let index = channel.index() as usize;
+                // check for settings changes
+                let mut m = changers[index].passthrough_midi(message);
+                if let Some(new_settings) = changers[index].get_change() {
+                    arpeggiators[index].stop_arpeggios()?;
+                    self.status.update_settings(channel, new_settings);
+                    arpeggiators[index] = create_arpeggiator(new_settings, &self.midi_out, channel, self.output_device_is_input_device);
+                }
+                // pass message through status
+                if m.is_none() { continue; }
+                m = self.status.passthrough_midi(m.unwrap());
+                // send message to arpeggiator
+                if m.is_none() { continue; }
+                arpeggiators[index].process(m.unwrap(), self.status)?;
+            } else {
+                // broadcast system/global messages (like TimingClock, Reset, etc.) only to arpeggiators
+                for arpeggiator in &mut arpeggiators {
+                    arpeggiator.process(message.clone(), self.status)?;
                 }
             }
-        }
-    }
-}
-
-pub struct MultiArpeggiator<'a, SG: SettingsGetter, SS: StatusSignal> {
-    pub midi_in: InputDevice,
-    pub midi_out: OutputDevice,
-    pub output_device_is_input_device: bool,
-    pub settings: SG,
-    pub status: &'a mut SS
-}
-
-impl<'a, SS: StatusSignal, SG: SettingsGetter> MultiArpeggiator<'a, SG, SS> {
-    pub fn listen(self) -> Result<(), Box<dyn Error>> {
-        self.listen_with_midi_receivers(Vec::new())
-    }
-
-    pub fn listen_with_midi_receivers(mut self, mut extra_midi_receivers: Vec<&mut dyn MidiReceiver>) -> Result<(), Box<dyn Error>> {
-        let mut existing_settings = self.settings.get().clone();
-        let mut arpeggiator: Box<dyn Arpeggiator> = existing_settings.mode.create(&self.midi_out, &self.settings.get().presets, self.output_device_is_input_device);
-        loop {
-            let mut m = Some(self.midi_in.read()?);
-            // pass message through extra receivers
-            for midi_receiver in extra_midi_receivers.iter_mut() {
-                m = midi_receiver.passthrough_midi(m.unwrap());
-                if m.is_none() { break; }
-            }
-            // pass message through settings
-            if m.is_none() { continue; }
-            m = self.settings.passthrough_midi(m.unwrap());
-            // handle settings changes
-            self.status.update_settings(self.settings.get());
-            let new_settings = self.settings.get().clone();
-            if new_settings != existing_settings {
-                existing_settings = new_settings;
-                arpeggiator.stop_arpeggios()?;
-                arpeggiator = existing_settings.mode.create(&self.midi_out, &self.settings.get().presets, self.output_device_is_input_device);
-                self.status.update_count(arpeggiator.count_arpeggios());
-            }
-            // pass message through status
-            if m.is_none() { continue; }
-            m = self.status.passthrough_midi(m.unwrap());
-            // process message in arp
-            if m.is_none() { continue; }
-            arpeggiator.process(m.unwrap(), self.settings.get(), self.status)?;
-            self.status.update_count(arpeggiator.count_arpeggios());
         }
     }
 }
 
 struct Passthrough<'a> {
     output: &'a OutputDevice,
-    output_device_is_input_device: bool
+    output_device_is_input_device: bool,
+    fixed_velocity: Option<u8>,
+    double_notes: Option<Vec<i8>>,
 }
 
 impl<'a> Passthrough<'a> {
-    fn new(output: &'a OutputDevice, output_device_is_input_device: bool) -> Self {
+    fn new(output: &'a OutputDevice, output_device_is_input_device: bool, settings: &Settings) -> Self {
         Self {
             output,
-            output_device_is_input_device
+            output_device_is_input_device,
+            fixed_velocity: settings.fixed_velocity,
+            double_notes: settings.double_notes.clone()
         }
     }
 
@@ -212,9 +243,9 @@ impl<'a> Passthrough<'a> {
 }
 
 impl<'a> Arpeggiator for Passthrough<'a> {
-    fn process(&mut self, mut message: MidiMessage<'static>, settings: &Settings, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, mut message: MidiMessage<'static>, _signal: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         if self.should_passthrough(&message) {
-            if let Some(fixed) = settings.fixed_velocity {
+            if let Some(fixed) = self.fixed_velocity {
                 message = match message {
                     MidiMessage::NoteOff(c, n, _) => MidiMessage::NoteOff(c, n, U7::from_u8_lossy(fixed)),
                     MidiMessage::NoteOn(c, n, _) => MidiMessage::NoteOn(c, n, U7::from_u8_lossy(fixed)),
@@ -222,7 +253,7 @@ impl<'a> Arpeggiator for Passthrough<'a> {
                     _ => message
                 };
             }
-            if let Some(doubling) = &settings.double_notes {
+            if let Some(doubling) = &self.double_notes {
                 self.output.send_with_doubling(message, doubling.iter())?;
             } else {
                 self.output.send(message)?;

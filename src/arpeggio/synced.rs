@@ -49,10 +49,10 @@ impl Arpeggio {
         Self { steps, ticks_per_step, finish_steps }
     }
 
-    pub fn from_preset(preset: &Preset, channel: Channel, velocity: Velocity, finish_steps: bool, notes_per_step: usize) -> Self {
+    pub fn from_preset(preset: &Preset, velocity: Velocity, finish_steps: bool, notes_per_step: usize) -> Self {
         let mut steps = Vec::new();
         for notes in preset.steps.chunks(notes_per_step) {
-            steps.push(Step::notes(notes.iter().map(|n| NoteDetails { c: channel, n: n.into(), v: velocity }).collect()));
+            steps.push(Step::notes(notes.iter().map(|n| NoteDetails { n: n.into(), v: velocity }).collect()));
         }
         Self {
             steps,
@@ -75,6 +75,7 @@ impl Arpeggio {
 
 pub struct Player {
     midi_out: MidiOutput,
+    channel_out: Channel,
     arpeggio: Arpeggio,
     step: usize,
     last_step: OptionIndex<Step>,
@@ -90,9 +91,10 @@ enum OptionIndex<T> {
 }
 
 impl Player {
-    pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, doubling: &Option<Vec<i8>>, max_repeats: Option<usize>) -> Self {
+    pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, channel_out: Channel, doubling: &Option<Vec<i8>>, max_repeats: Option<usize>) -> Self {
         Self {
             arpeggio,
+            channel_out,
             step: 0,
             wait_ticks: 0,
             should_stop: false,
@@ -104,8 +106,8 @@ impl Player {
 
     fn last_step_off(&self) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         match &self.last_step {
-            OptionIndex::SomeIndex(index) => self.arpeggio.steps[*index].send_off(&self.midi_out),
-            OptionIndex::Some(step) => step.send_off(&self.midi_out),
+            OptionIndex::SomeIndex(index) => self.arpeggio.steps[*index].send_off(&self.midi_out, self.channel_out),
+            OptionIndex::Some(step) => step.send_off(&self.midi_out, self.channel_out),
             OptionIndex::None => Ok(())
         }
     }
@@ -123,7 +125,7 @@ impl Player {
             if self.step == 0 && (self.should_stop || self.remaining_repeats == Some(0)) {
                 return Ok(false);
             }
-            self.arpeggio.steps[self.step].send_on(&self.midi_out)?;
+            self.arpeggio.steps[self.step].send_on(&self.midi_out, self.channel_out)?;
             self.last_step = OptionIndex::SomeIndex(self.step);
             if self.step == self.arpeggio.steps.len() - 1 {
                 self.step = 0;

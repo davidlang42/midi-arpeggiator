@@ -11,7 +11,12 @@ use wmidi::FromBytesError;
 use wmidi::MidiMessage;
 use wmidi::Note;
 use wmidi::U7;
+
+#[cfg(feature = "unix")]
 use nonblock::NonBlockingReader;
+
+#[cfg(not(feature = "unix"))]
+use crate::nonblock_win::NonBlockingReader;
 
 pub trait MidiReceiver {
     fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {
@@ -34,6 +39,7 @@ pub struct OutputDevice {
 }
 
 pub const TICKS_PER_BEAT: usize = 24;
+pub const CHANNELS: usize = 16;
 
 impl InputDevice {
     pub fn open(midi_in: &str, include_clock_ticks: bool) -> Result<Self, Box<dyn Error>> {

@@ -1,37 +1,36 @@
+use std::array;
 use std::io::Write;
 use crate::settings::Settings;
-use crate::midi::MidiReceiver;
-
-#[cfg(feature = "led")]
-use std::cmp::min;
-
-#[cfg(feature = "led")]
-use crate::arpeggiator::{ArpeggiatorMode, Pattern};
-
-#[cfg(feature = "led")]
-use crate::midi;
-
-#[cfg(feature = "led")]
-use wmidi::MidiMessage;
-
-#[cfg(feature = "led")]
-use smart_leds::{SmartLedsWrite, RGB8};
+use crate::midi::{self, MidiReceiver};
+use wmidi::Channel;
 
 #[cfg(feature = "led")]
 use ws281x_rpi::Ws2812Rpi;
 
+#[cfg(feature = "led")]
+use smart_leds::SmartLedsWrite;
+
+#[cfg(not(feature = "led"))]
+use crate::ws281x_rpi_stub::Ws2812Rpi;
+
+use std::cmp::min;
+use crate::arpeggiator::{ArpeggiatorMode, Pattern};
+use wmidi::MidiMessage;
+use smart_leds::RGB8;
+
 pub trait StatusSignal: MidiReceiver {
-    fn update_settings(&mut self, settings: &Settings);
-    fn update_count(&mut self, arpeggios: usize);
-    fn reset_beat(&mut self);
+    fn update_settings(&mut self, channel: Channel, settings: &Settings);
+    fn update_count(&mut self, channel: Channel, arpeggios: usize);
+    fn reset_beat(&mut self, channel: Channel);
     fn waiting_for_midi_connect(&mut self);
     fn waiting_for_midi_disconnect(&mut self);
     fn waiting_for_midi_clock(&mut self);
 }
 
+#[allow(dead_code)]
 pub struct TextStatus<W: Write> {
-    count: Option<usize>,
-    settings: Option<Settings>,
+    counts: [usize; midi::CHANNELS],
+    settings: [Settings; midi::CHANNELS],
     waiting: Option<WaitFor>,
     writer: W
 }
@@ -43,11 +42,12 @@ enum WaitFor {
     Clock
 }
 
+#[allow(dead_code)]
 impl<W: Write> TextStatus<W> {
-    pub fn _new(writer: W) -> Self {
+    pub fn new(writer: W, default_settings: &Settings) -> Self {
         Self {
-            count: None,
-            settings: None,
+            counts: [0; _],
+            settings: array::from_fn(|_| default_settings.clone()),
             waiting: None,
             writer
         }
@@ -75,23 +75,25 @@ impl<W: Write> TextStatus<W> {
 impl<W: Write> MidiReceiver for TextStatus<W> { }
 
 impl<W: Write> StatusSignal for TextStatus<W> {
-    fn update_settings(&mut self, settings: &Settings) {
+    fn update_settings(&mut self, channel: Channel, settings: &Settings) {
         self.clear_wait();
-        if self.settings.is_none() || self.settings.as_ref().unwrap() != settings {
-            self.settings = Some(settings.clone());
-            writeln!(self.writer, "{:?}", self.settings.as_ref().unwrap()).unwrap();
+        let index = channel.index() as usize;
+        if self.settings[index] != *settings {
+            self.settings[index] = settings.clone();
+            writeln!(self.writer, "[Ch {}] {:?}", channel.number(), settings).unwrap();
         }
     }
 
-    fn update_count(&mut self, arpeggios: usize) {
-        if self.count.is_none() || self.count.unwrap() != arpeggios {
-            self.count = Some(arpeggios);
-            writeln!(self.writer, "Arpeggio count: {}", self.count.unwrap()).unwrap();
+    fn update_count(&mut self, channel: Channel, arpeggios: usize) {
+        let idx = channel.index() as usize;
+        if self.counts[idx] != arpeggios {
+            self.counts[idx] = arpeggios;
+            writeln!(self.writer, "[Ch {}] Arpeggio count: {}", channel.number(), arpeggios).unwrap();
         }
     }
 
-    fn reset_beat(&mut self) {
-        writeln!(self.writer, "**Reset beat**").unwrap();
+    fn reset_beat(&mut self, channel: Channel) {
+        writeln!(self.writer, "[Ch {}] **Reset beat**", channel.number()).unwrap();
     }
     
     fn waiting_for_midi_connect(&mut self) {
@@ -107,7 +109,7 @@ impl<W: Write> StatusSignal for TextStatus<W> {
     }
 }
 
-#[cfg(feature = "led")]
+#[allow(dead_code)]
 pub struct LedStatus<const N: usize> {
     driver: Ws2812Rpi,
     tick: usize,
@@ -117,7 +119,7 @@ pub struct LedStatus<const N: usize> {
     waiting: Option<(WaitFor, usize)>
 }
 
-#[cfg(feature = "led")]
+#[allow(dead_code)]
 impl<const N: usize> LedStatus<N> {
     pub fn new(pin: u8) -> Self {
         let mut status = Self {
@@ -185,7 +187,6 @@ impl<const N: usize> LedStatus<N> {
     }
 }
 
-#[cfg(feature = "led")]
 impl<const N: usize> MidiReceiver for LedStatus<N> {
     fn passthrough_midi(&mut self, message: wmidi::MidiMessage<'static>) -> Option<wmidi::MidiMessage<'static>> {
         if let MidiMessage::TimingClock = message {
@@ -200,9 +201,8 @@ impl<const N: usize> MidiReceiver for LedStatus<N> {
     }
 }
 
-#[cfg(feature = "led")]
 impl<const N: usize> StatusSignal for LedStatus<N> {
-    fn update_settings(&mut self, settings: &Settings) {
+    fn update_settings(&mut self, _channel: Channel, settings: &Settings) {
         self.clear_wait();
         if settings.mode == ArpeggiatorMode::Passthrough {
             self.fixed_steps = None;
@@ -213,11 +213,11 @@ impl<const N: usize> StatusSignal for LedStatus<N> {
         }
     }
 
-    fn update_count(&mut self, arpeggios: usize) {
+    fn update_count(&mut self, _channel: Channel, arpeggios: usize) {
         self.running = arpeggios > 0;
     }
 
-    fn reset_beat(&mut self) {
+    fn reset_beat(&mut self, _channel: Channel) {
         self.tick = 0;
     }
     
