@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use std::sync::{mpsc, Arc, atomic::{AtomicBool, Ordering}};
 use std::thread::{self, JoinHandle};
 use std::fmt;
-use wmidi::{Note, MidiMessage};
+use wmidi::{Channel, MidiMessage, Note};
 use crate::midi::{self, MidiOutput};
 
 use super::{Step, NoteDetails};
@@ -30,18 +30,18 @@ impl fmt::Display for Arpeggio {
 }
 
 impl Arpeggio {
-    fn play(&self, midi_out: MidiOutput, should_stop: Arc<AtomicBool>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+    fn play(&self, midi_out: MidiOutput, channel: Channel, should_stop: Arc<AtomicBool>) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         let mut i = 0;
         while !should_stop.load(Ordering::Relaxed) || (self.finish_steps && i != 0) {
             let step = &self.steps[i].1;
-            step.send_on(&midi_out)?;
+            step.send_on(&midi_out, channel)?;
             if i == self.steps.len() - 1 {
                 i = 0;
             } else {
                 i += 1;
             }
             thread::sleep(self.steps[i].0);
-            step.send_off(&midi_out)?;
+            step.send_off(&midi_out, channel)?;
         }
         Ok(())
     }
@@ -90,17 +90,17 @@ impl Arpeggio {
 }
 
 
-pub struct Player{
+pub struct Player {
     thread: JoinHandle<Result<(), mpsc::SendError<MidiMessage<'static>>>>,
     should_stop: Arc<AtomicBool>
 }
 
 impl Player {
-    pub fn start(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, doubling: &Option<Vec<i8>>) -> Result<Self, Box<dyn Error>> {
+    pub fn start(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, channel: Channel, doubling: &Option<Vec<i8>>) -> Result<Self, Box<dyn Error>> {
         let output = midi_out.with_doubling(doubling);
         let should_stop = Arc::new(AtomicBool::new(false));
         let should_stop_cloned = Arc::clone(&should_stop);
-        let thread = thread::Builder::new().name(format!("arp:{}", arpeggio)).spawn(move || arpeggio.play(output, should_stop_cloned))?;
+        let thread = thread::Builder::new().name(format!("arp:{}", arpeggio)).spawn(move || arpeggio.play(output, channel, should_stop_cloned))?;
         Ok(Self {
             thread,
             should_stop

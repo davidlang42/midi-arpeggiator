@@ -1,6 +1,7 @@
+use std::array;
 use std::io::Write;
 use crate::settings::Settings;
-use crate::midi::MidiReceiver;
+use crate::midi::{self, MidiReceiver};
 use wmidi::Channel;
 
 #[cfg(feature = "led")]
@@ -22,7 +23,7 @@ use smart_leds::{SmartLedsWrite, RGB8};
 use ws281x_rpi::Ws2812Rpi;
 
 pub trait StatusSignal: MidiReceiver {
-    fn update_settings(&mut self, settings: &Settings);
+    fn update_settings(&mut self, channel: Channel, settings: &Settings);
     fn update_count(&mut self, channel: Channel, arpeggios: usize);
     fn reset_beat(&mut self, channel: Channel);
     fn waiting_for_midi_connect(&mut self);
@@ -31,8 +32,8 @@ pub trait StatusSignal: MidiReceiver {
 }
 
 pub struct TextStatus<W: Write> {
-    counts: [usize; 16],
-    settings: Option<Settings>,
+    counts: [usize; midi::CHANNELS],
+    settings: [Settings; midi::CHANNELS],
     waiting: Option<WaitFor>,
     writer: W
 }
@@ -45,10 +46,10 @@ enum WaitFor {
 }
 
 impl<W: Write> TextStatus<W> {
-    pub fn _new(writer: W) -> Self {
+    pub fn new(writer: W, default_settings: &Settings) -> Self {
         Self {
-            counts: [0; 16],
-            settings: None,
+            counts: [0; _],
+            settings: array::from_fn(|_| default_settings.clone()),
             waiting: None,
             writer
         }
@@ -76,25 +77,25 @@ impl<W: Write> TextStatus<W> {
 impl<W: Write> MidiReceiver for TextStatus<W> { }
 
 impl<W: Write> StatusSignal for TextStatus<W> {
-    fn update_settings(&mut self, settings: &Settings) {
+    fn update_settings(&mut self, channel: Channel, settings: &Settings) {
         self.clear_wait();
-        if self.settings.is_none() || self.settings.as_ref().unwrap() != settings {
-            self.settings = Some(settings.clone());
-            writeln!(self.writer, "{:?}", self.settings.as_ref().unwrap()).unwrap();
+        let index = channel.index() as usize;
+        if self.settings[index] != *settings {
+            self.settings[index] = settings.clone();
+            writeln!(self.writer, "[Ch {}] {:?}", channel.number(), settings).unwrap();
         }
     }
 
     fn update_count(&mut self, channel: Channel, arpeggios: usize) {
         let idx = channel.index() as usize;
-        if idx < 16 && self.counts[idx] != arpeggios {
+        if self.counts[idx] != arpeggios {
             self.counts[idx] = arpeggios;
-            writeln!(self.writer, "[Ch {}] Arpeggio count: {}", idx + 1, arpeggios).unwrap();
+            writeln!(self.writer, "[Ch {}] Arpeggio count: {}", channel.number(), arpeggios).unwrap();
         }
     }
 
     fn reset_beat(&mut self, channel: Channel) {
-        let idx = channel.index() as usize;
-        writeln!(self.writer, "[Ch {}] **Reset beat**", idx + 1).unwrap();
+        writeln!(self.writer, "[Ch {}] **Reset beat**", channel.number()).unwrap();
     }
     
     fn waiting_for_midi_connect(&mut self) {
@@ -241,7 +242,7 @@ impl<const N: usize> StatusSignal for GlobalLedStatus<N> {
 pub struct ChannelHueLedStatus<const N: usize> {
     driver: Ws2812Rpi,
     tick: usize,
-    counts: [usize; 16],
+    counts: [usize; midi::CHANNELS],
     fixed_steps: Option<usize>,
     pattern: Option<Pattern>,
     waiting: Option<(WaitFor, usize)>
@@ -253,7 +254,7 @@ impl<const N: usize> ChannelHueLedStatus<N> {
         let mut status = Self {
             driver: Ws2812Rpi::new(N as i32, pin as i32).unwrap(),
             tick: 0,
-            counts: [0; 16],
+            counts: [0; midi::CHANNELS],
             fixed_steps: None,
             pattern: None,
             waiting: None
@@ -347,10 +348,7 @@ impl<const N: usize> StatusSignal for ChannelHueLedStatus<N> {
     }
 
     fn update_count(&mut self, channel: Channel, arpeggios: usize) {
-        let idx = u8::from(channel) as usize;
-        if idx < 16 {
-            self.counts[idx] = arpeggios;
-        }
+        self.counts[channel.index() as usize] = arpeggios;
     }
 
     fn reset_beat(&mut self, _channel: Channel) {

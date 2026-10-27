@@ -45,20 +45,20 @@ impl Arpeggio {
 
 pub struct Player {
     midi_out: MidiOutput,
+    channel_out: Channel,
     arpeggio: Arpeggio,
     last_note: usize,
     wait_ticks: usize,
-    channel: Channel,
     pub should_stop: bool
 }
 
 impl Player {
-    pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, doubling: &Option<Vec<i8>>, channel: Channel) -> Self {
+    pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, channel_out: Channel, doubling: &Option<Vec<i8>>) -> Self {
         Self {
             arpeggio,
+            channel_out,
             last_note: NOTE_MAX - 1,
             wait_ticks: 0,
-            channel,
             should_stop: false,
             midi_out: midi_out.with_doubling(doubling)
         }
@@ -111,13 +111,13 @@ impl Player {
     }
 
     fn last_note_off(&self) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
-        let message = MidiMessage::NoteOff(self.channel, Note::from_u8_lossy(self.last_note as u8), U7::MIN);
+        let message = MidiMessage::NoteOff(self.channel_out, Note::from_u8_lossy(self.last_note as u8), U7::MIN);
         self.midi_out.send(message)
     }
 
     fn next_note_on(&mut self, next_note: usize, v: Velocity) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         self.last_note = next_note;
-        let message = MidiMessage::NoteOn(self.channel, Note::from_u8_lossy(next_note as u8), v);
+        let message = MidiMessage::NoteOn(self.channel_out, Note::from_u8_lossy(next_note as u8), v);
         self.midi_out.send(message)
     }
 

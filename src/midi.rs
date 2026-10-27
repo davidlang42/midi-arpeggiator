@@ -11,7 +11,12 @@ use wmidi::FromBytesError;
 use wmidi::MidiMessage;
 use wmidi::Note;
 use wmidi::U7;
+
+#[cfg(feature = "unix")]
 use nonblock::NonBlockingReader;
+
+#[cfg(not(feature = "unix"))]
+use crate::nonblock_win::NonBlockingReader;
 
 pub trait MidiReceiver {
     fn passthrough_midi(&mut self, message: MidiMessage<'static>) -> Option<MidiMessage<'static>> {

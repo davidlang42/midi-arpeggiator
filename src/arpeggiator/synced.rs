@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::mem;
 use std::time::Instant;
+use crate::arpeggiator::Pattern;
 use crate::midi;
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggio::synced::{Arpeggio, Player};
@@ -13,24 +14,39 @@ use super::Arpeggiator;
 
 pub struct PressHold<'a> {
     midi_out: &'a midi::OutputDevice,
-    channel: Channel,
+    channel_out: Channel,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     pedal_notes_off: HashSet<Note>,
     pedal: bool,
-    arpeggios: Vec<(HashSet<Note>, Player)>
+    arpeggios: Vec<(HashSet<Note>, Player)>,
+    // from Settings:
+    finish_pattern: bool,
+    fixed_velocity: Option<u8>,
+    fixed_steps: Option<usize>, // assumed in 1 beat
+    fixed_notes_per_step: Option<usize>,
+    pattern: Pattern,
+    double_notes: Option<Vec<i8>>,
+    max_repeats: Option<usize>,
 }
 
 impl<'a> PressHold<'a> {
     const TRIGGER_TIME_MS: u128 = 50;
 
-    pub fn new(midi_out: &'a midi::OutputDevice, channel: Channel) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
         Self {
             midi_out,
-            channel,
+            channel_out,
             held_notes: HashMap::new(),
             pedal: false,
             pedal_notes_off: HashSet::new(),
-            arpeggios: Vec::new()
+            arpeggios: Vec::new(),
+            finish_pattern: settings.finish_pattern,
+            fixed_velocity: settings.fixed_velocity,
+            fixed_steps: settings.fixed_steps,
+            fixed_notes_per_step: settings.fixed_notes_per_step,
+            pattern: settings.pattern,
+            double_notes: settings.double_notes.clone(),
+            max_repeats: settings.max_repeats,
         }
     }
 
@@ -45,7 +61,7 @@ impl<'a> PressHold<'a> {
 }
 
 impl<'a> Arpeggiator for PressHold<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, received: MidiMessage<'static>, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 let new_pedal = u8::from(value) >= 64;
@@ -60,12 +76,12 @@ impl<'a> Arpeggiator for PressHold<'a> {
                     }
                 }
             },
-            MidiMessage::NoteOn(c, n, v) => {
+            MidiMessage::NoteOn(_, n, v) => {
                 if self.pedal_notes_off.remove(&n) { // this implies self.pedal
                     // we are re-pressing a note which isn't actually off yet, because we're holding the pedal
                     // so we just removed it from what will be released when the pedal is released
                 } else {
-                    self.held_notes.insert(n, (Instant::now(), NoteDetails::new(c, n, v, settings.fixed_velocity)));
+                    self.held_notes.insert(n, (Instant::now(), NoteDetails::new(n, v, self.fixed_velocity)));
                 }
             },
             MidiMessage::NoteOff(_, n, _) => {
@@ -81,10 +97,10 @@ impl<'a> Arpeggiator for PressHold<'a> {
                 if self.held_notes.len() != 0 && self.held_notes.values().map(|(i, _)| i).min().unwrap().elapsed().as_millis() > Self::TRIGGER_TIME_MS {
                     let note_details: Vec<NoteDetails> = self.held_notes.drain().map(|(_, (_, d))| d).collect();
                     let note_set: HashSet<Note> = note_details.iter().map(|d| d.n).collect();
-                    let steps = settings.generate_steps(note_details);
-                    let arp = Arpeggio::from(steps, 1, settings.finish_pattern);
-                    self.arpeggios.push((note_set, Player::init(arp, &self.midi_out, &settings.double_notes, settings.max_repeats)));
-                    status.reset_beat(self.channel);
+                    let steps = Settings::generate_steps(self.fixed_steps, self.pattern, self.fixed_notes_per_step, note_details);
+                    let arp = Arpeggio::from(steps, 1, self.finish_pattern);
+                    self.arpeggios.push((note_set, Player::init(arp, &self.midi_out, self.channel_out, &self.double_notes, self.max_repeats)));
+                    status.reset_beat(self.channel_out);
                 }
                 let mut i = 0;
                 while i < self.arpeggios.len() {
@@ -101,7 +117,7 @@ impl<'a> Arpeggiator for PressHold<'a> {
             },
             _ => {}
         }
-        status.update_count(self.channel, self.count_arpeggios());
+        status.update_count(self.channel_out, self.count_arpeggios());
         Ok(())
     }
 
@@ -116,24 +132,33 @@ impl<'a> Arpeggiator for PressHold<'a> {
 
 pub struct MutatingHold<'a> {
     midi_out: &'a midi::OutputDevice,
-    channel: Channel,
+    channel_out: Channel,
     held_notes: Vec<NoteDetails>,
     changed: bool,
     arpeggio: Option<Player>,
     pedal: bool,
-    pedal_notes_off: HashSet<Note>
+    pedal_notes_off: HashSet<Note>,
+    // from Settings:
+    finish_pattern: bool,
+    fixed_velocity: Option<u8>,
+    double_notes: Option<Vec<i8>>,
+    max_repeats: Option<usize>,
 }
 
 impl<'a> MutatingHold<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, channel: Channel) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
         Self {
             midi_out,
-            channel,
+            channel_out,
             held_notes: Vec::new(),
             changed: false,
             arpeggio: None,
             pedal: false,
-            pedal_notes_off: HashSet::new()
+            pedal_notes_off: HashSet::new(),
+            finish_pattern: settings.finish_pattern,
+            fixed_velocity: settings.fixed_velocity,
+            double_notes: settings.double_notes.clone(),
+            max_repeats: settings.max_repeats,
         }
     }
 
@@ -153,7 +178,7 @@ impl<'a> MutatingHold<'a> {
 }
 
 impl<'a> Arpeggiator for MutatingHold<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, received: MidiMessage<'static>, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 let new_pedal = u8::from(value) >= 64;
@@ -168,12 +193,12 @@ impl<'a> Arpeggiator for MutatingHold<'a> {
                     }
                 }
             },
-            MidiMessage::NoteOn(c, n, v) => {
+            MidiMessage::NoteOn(_, n, v) => {
                 if self.pedal_notes_off.remove(&n) { // this implies self.pedal
                     // we are re-pressing a note which isn't actually off yet, because we're holding the pedal
                     // so we just removed it from what will be released when the pedal is released
                 } else {
-                    self.held_notes.push(NoteDetails::new(c, n, v, settings.fixed_velocity));
+                    self.held_notes.push(NoteDetails::new(n, v, self.fixed_velocity));
                     self.changed = true;
                 }
             },
@@ -196,12 +221,12 @@ impl<'a> Arpeggiator for MutatingHold<'a> {
                     } else {
                         let steps: Vec<Step> = self.held_notes.iter().map(|n| Step::note(*n)).collect();
                         let steps_len = steps.len();
-                        let arp = Arpeggio::from(steps, steps_len, settings.finish_pattern);
+                        let arp = Arpeggio::from(steps, steps_len, self.finish_pattern);
                         if let Some(existing) = &mut self.arpeggio {
                             existing.change_arpeggio(arp)?;
                         } else {
-                            self.arpeggio = Some(Player::init(arp, &self.midi_out, &settings.double_notes, settings.max_repeats));
-                            status.reset_beat(self.channel);
+                            self.arpeggio = Some(Player::init(arp, &self.midi_out, self.channel_out, &self.double_notes, self.max_repeats));
+                            status.reset_beat(self.channel_out);
                         }
                     }
                 }
@@ -220,7 +245,7 @@ impl<'a> Arpeggiator for MutatingHold<'a> {
             },
             _ => {}
         }
-        status.update_count(self.channel, self.count_arpeggios());
+        status.update_count(self.channel_out, self.count_arpeggios());
         Ok(())
     }
 
@@ -257,26 +282,35 @@ fn drain_and_force_stop_map<N>(arpeggios: &mut HashMap<N, Player>) -> Result<(),
 
 pub struct PedalRecorder<'a> {
     midi_out: &'a midi::OutputDevice,
-    channel: Channel,
+    channel_out: Channel,
     notes: Vec<(Instant, NoteDetails)>,
     ticks_since_last_note: usize,
     thru_notes: HashMap<Note, NoteDetails>,
     pedal: bool,
     arpeggios: HashMap<Note, Player>,
-    recorded: Option<Arpeggio>
+    recorded: Option<Arpeggio>,
+    // from Settings:
+    finish_pattern: bool,
+    fixed_velocity: Option<u8>,
+    double_notes: Option<Vec<i8>>,
+    max_repeats: Option<usize>,
 }
 
 impl<'a> PedalRecorder<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, channel: Channel) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
         Self {
             midi_out,
-            channel,
+            channel_out,
             notes: Vec::new(),
             thru_notes: HashMap::new(),
             ticks_since_last_note: 0,
             pedal: false,
             arpeggios: HashMap::new(),
-            recorded: None
+            recorded: None,
+            finish_pattern: settings.finish_pattern,
+            fixed_velocity: settings.fixed_velocity,
+            double_notes: settings.double_notes.clone(),
+            max_repeats: settings.max_repeats,
         }
     }
 }
@@ -286,18 +320,18 @@ impl<'a> PedalRecorder<'a> {
 }
 
 impl<'a> Arpeggiator for PedalRecorder<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, received: MidiMessage<'static>, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 if !self.pedal && u8::from(value) >= 64 {
                     self.pedal = true;
-                    status.reset_beat(self.channel);
+                    status.reset_beat(self.channel_out);
                     self.recorded = None;
                     drain_and_force_stop_map(&mut self.arpeggios)?;
                 } else if self.pedal && u8::from(value) < 64 {
                     self.pedal = false;
                     for (_, thru_note) in self.thru_notes.drain() {
-                        self.midi_out.send(MidiMessage::NoteOff(thru_note.c, thru_note.n, thru_note.v))?;
+                        self.midi_out.send(MidiMessage::NoteOff(self.channel_out, thru_note.n, thru_note.v))?;
                     }
                     if self.notes.len() > 0 {
                         // save recorded arpeggio
@@ -315,20 +349,20 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                         }
                         steps.push(Step::notes(step_notes));
                         let total_beats = steps.len();
-                        self.recorded = Some(Arpeggio::from(steps, total_beats, settings.finish_pattern));
+                        self.recorded = Some(Arpeggio::from(steps, total_beats, self.finish_pattern));
                         // start play in original key
                         let arp = self.recorded.as_ref().unwrap();
                         let original = arp.first_note();
                         let new_arp = arp.transpose(original, original);
-                        self.arpeggios.insert(original, Player::init(new_arp, &self.midi_out, &settings.double_notes, settings.max_repeats));
-                        status.reset_beat(self.channel);
+                        self.arpeggios.insert(original, Player::init(new_arp, &self.midi_out, self.channel_out, &self.double_notes, self.max_repeats));
+                        status.reset_beat(self.channel_out);
                     }
                 }
             },
-            MidiMessage::NoteOn(c, n, v) => {
+            MidiMessage::NoteOn(_, n, v) => {
                 if self.pedal {
                     self.midi_out.send(received)?;
-                    let d = NoteDetails::new(c, n, v, settings.fixed_velocity);
+                    let d = NoteDetails::new(n, v, self.fixed_velocity);
                     self.thru_notes.insert(n, d);
                     self.notes.push((Instant::now(), d));
                     self.ticks_since_last_note = 0;
@@ -337,8 +371,8 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
                 } else if let Some(arp) = &self.recorded {
                     let original = arp.first_note();
                     let new_arp = arp.transpose(original, n);
-                    self.arpeggios.insert(n, Player::init(new_arp, &self.midi_out, &settings.double_notes, settings.max_repeats));
-                    status.reset_beat(self.channel);
+                    self.arpeggios.insert(n, Player::init(new_arp, &self.midi_out, self.channel_out, &self.double_notes, self.max_repeats));
+                    status.reset_beat(self.channel_out);
                 }
             },
             MidiMessage::NoteOff(_, n, _) => {
@@ -369,7 +403,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
             },
             _ => {}
         }
-        status.update_count(self.channel, self.count_arpeggios());
+        status.update_count(self.channel_out, self.count_arpeggios());
         Ok(())
     }
 
@@ -384,24 +418,37 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
 
 pub struct PrerecordedSets<'a> {
     midi_out: &'a midi::OutputDevice,
-    channel: Channel,
+    channel_out: Channel,
     presets: Vec<Preset>,
     notes: HashSet<Note>,
     changed: bool,
     playing: Option<Player>,
     pedal: bool,
+    // from Settings:
+    finish_pattern: bool,
+    fixed_velocity: Option<u8>,
+    fixed_notes_per_step: Option<usize>,
+    double_notes: Option<Vec<i8>>,
+    max_repeats: Option<usize>,
+    use_pedal: Option<bool>
 }
 
 impl<'a> PrerecordedSets<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, presets: Vec<Preset>, channel: Channel) -> Self {
+    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
         Self {
             midi_out,
-            channel,
-            presets,
+            channel_out,
             notes: HashSet::new(),
             changed: false,
             playing: None,
             pedal: false,
+            finish_pattern: settings.finish_pattern,
+            fixed_velocity: settings.fixed_velocity,
+            fixed_notes_per_step: settings.fixed_notes_per_step,
+            double_notes: settings.double_notes.clone(),
+            presets: settings.presets.clone().unwrap_or_else(|| Vec::new()), // not helpful if presets is missing, but better than crashing
+            max_repeats: settings.max_repeats,
+            use_pedal: settings.use_pedal
         }
     }
 }
@@ -418,7 +465,7 @@ impl<'a> PrerecordedSets<'a> {
 }
 
 impl<'a> Arpeggiator for PrerecordedSets<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, settings: &Settings, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+    fn process(&mut self, received: MidiMessage<'static>, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
         match received {
             MidiMessage::ControlChange(_, ControlFunction::DAMPER_PEDAL, value) => {
                 self.pedal = u8::from(value) >= 64;
@@ -432,16 +479,16 @@ impl<'a> Arpeggiator for PrerecordedSets<'a> {
                 self.changed = true;
             },
             MidiMessage::TimingClock => {
-                let dont_change_because_pedal = settings.use_pedal == Some(true) && self.pedal;
+                let dont_change_because_pedal = self.use_pedal == Some(true) && self.pedal;
                 if self.changed && !dont_change_because_pedal {
                     self.changed = false;
                     if let Some(p) = self.find_preset(&self.notes) {
                         if let Some(existing) = &mut self.playing {
                             existing.force_stop()?;
                         }
-                        let new_arp = Arpeggio::from_preset(&self.presets[p], self.channel, U7::from_u8_lossy(settings.fixed_velocity.unwrap_or(100)), settings.finish_pattern, settings.fixed_notes_per_step.unwrap_or(1));
-                        self.playing = Some(Player::init(new_arp, self.midi_out, &settings.double_notes, settings.max_repeats));
-                        status.reset_beat(self.channel);
+                        let new_arp = Arpeggio::from_preset(&self.presets[p], U7::from_u8_lossy(self.fixed_velocity.unwrap_or(100)), self.finish_pattern, self.fixed_notes_per_step.unwrap_or(1));
+                        self.playing = Some(Player::init(new_arp, self.midi_out, self.channel_out, &self.double_notes, self.max_repeats));
+                        status.reset_beat(self.channel_out);
                     } else {
                         if let Some(existing) = &mut self.playing {
                             existing.stop();
@@ -456,7 +503,7 @@ impl<'a> Arpeggiator for PrerecordedSets<'a> {
             },
             _ => {}
         }
-        status.update_count(self.channel, self.count_arpeggios());
+        status.update_count(self.channel_out, self.count_arpeggios());
         Ok(())
     }
 

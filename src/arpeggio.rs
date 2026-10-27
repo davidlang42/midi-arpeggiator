@@ -1,6 +1,6 @@
 use std::sync::mpsc;
 use std::fmt;
-use wmidi::{Note, MidiMessage, Velocity, Channel};
+use wmidi::{Channel, MidiMessage, Note, Velocity};
 
 use crate::midi::MidiOutput;
 
@@ -10,13 +10,12 @@ pub mod full_length;
 
 #[derive(Copy, Clone)]
 pub struct NoteDetails {
-    pub c: Channel,
     pub n: Note,
     pub v: Velocity
 }
 
 impl NoteDetails  {
-    pub fn new(c: Channel, n: Note, mut v: Velocity, fixed_velocity: Option<u8>) -> Self {
+    pub fn new(n: Note, mut v: Velocity, fixed_velocity: Option<u8>) -> Self {
         if let Some(fixed) = fixed_velocity {
             v = if fixed >= u8::from(Velocity::MAX) {
                 Velocity::MAX
@@ -24,7 +23,7 @@ impl NoteDetails  {
                 fixed.try_into().unwrap()
             };
         }
-        Self { c, n, v }
+        Self { n, v }
     }
 }
 
@@ -50,17 +49,17 @@ impl fmt::Display for Step {
 }
 
 impl Step {
-    pub fn send_on(&self, tx: &MidiOutput) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+    pub fn send_on(&self, tx: &MidiOutput, channel: Channel) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         for note in &self.notes {
-            let message = MidiMessage::NoteOn(note.c, note.n, note.v);
+            let message = MidiMessage::NoteOn(channel, note.n, note.v);
             tx.send(message)?;
         }
         Ok(())
     }
 
-    pub fn send_off(&self, tx: &MidiOutput) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
+    pub fn send_off(&self, tx: &MidiOutput, channel: Channel) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
         for note in &self.notes {
-            let message = MidiMessage::NoteOff(note.c, note.n, note.v);
+            let message = MidiMessage::NoteOff(channel, note.n, note.v);
             tx.send(message)?;
         }
         Ok(())
@@ -75,7 +74,6 @@ impl Step {
         for d in &self.notes {
             if let Ok(new_n) = d.n.step(half_steps) {
                 notes.push(NoteDetails {
-                    c: d.c,
                     n: new_n,
                     v: d.v
                 });
