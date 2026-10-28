@@ -11,6 +11,7 @@ use crate::settings::{Settings, SettingsChanger};
 
 pub mod timed;
 pub mod synced;
+pub mod triggered;
 pub mod full_length;
 
 #[derive(Copy, Clone, EnumIter, Debug, Serialize, Deserialize, PartialEq)]
@@ -85,11 +86,13 @@ pub enum ArpeggiatorMode {
     EvenMutator,
     PrerecordedSets,
     TriggeredChords,
+    MidiLoop,
+    PatternOnPress,
 }
 
 fn create_arpeggiator<'a>(settings: &Settings, midi_out: &'a OutputDevice, channel_out: Channel, output_device_is_input_device: bool) -> Box<dyn Arpeggiator + 'a> {
     match settings.mode {
-        ArpeggiatorMode::Passthrough => Box::new(Passthrough::new(midi_out, output_device_is_input_device, settings)), // doesn't respect channel_out, always passes through input channel
+        ArpeggiatorMode::Passthrough => Box::new(Passthrough::new(midi_out, output_device_is_input_device, settings)),
         ArpeggiatorMode::MutatingHold => Box::new(synced::MutatingHold::new(midi_out, channel_out, settings)),
         ArpeggiatorMode::PressHold => Box::new(synced::PressHold::new(midi_out, channel_out, settings)),
         ArpeggiatorMode::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out, channel_out, settings)),
@@ -97,7 +100,9 @@ fn create_arpeggiator<'a>(settings: &Settings, midi_out: &'a OutputDevice, chann
         ArpeggiatorMode::SyncedPedalRecorder => Box::new(synced::PedalRecorder::new(midi_out, channel_out, settings)),
         ArpeggiatorMode::EvenMutator => Box::new(full_length::EvenMutator::new(midi_out, channel_out, settings)),
         ArpeggiatorMode::PrerecordedSets => Box::new(synced::PrerecordedSets::new(midi_out, channel_out, settings)),
-        ArpeggiatorMode::TriggeredChords => Box::new(full_length::TriggeredChords::new(midi_out, channel_out, settings))
+        ArpeggiatorMode::TriggeredChords => Box::new(triggered::TriggeredChords::new(midi_out, channel_out, settings)),
+        ArpeggiatorMode::MidiLoop => Box::new(synced::MidiLoop::new(midi_out, channel_out, settings)),
+        ArpeggiatorMode::PatternOnPress => Box::new(triggered::PatternOnPress::new(midi_out, channel_out, settings)),
     }
 }
 
@@ -124,7 +129,6 @@ pub struct MultiArpeggiator<'a, SC: SettingsChanger, SS: StatusSignal> {
 
 impl<'a, SC: SettingsChanger, SS: StatusSignal> MultiArpeggiator<'a, SC, SS> {
     pub fn new(midi_in: &str, midi_out: &str, settings_changer: SC, status: &'a mut SS) -> Result<Self, Box<dyn Error>> {
-        
         let output_device_is_input_device = midi_in == midi_out;
         Ok(Self {
             midi_in: if output_device_is_input_device {
@@ -142,24 +146,7 @@ impl<'a, SC: SettingsChanger, SS: StatusSignal> MultiArpeggiator<'a, SC, SS> {
     pub fn listen(mut self) -> Result<(), Box<dyn Error>> {
         let mut changers: [SC; midi::CHANNELS] = array::from_fn(|_| self.settings_changer.clone());
         let default_settings = self.settings_changer.get_default();
-        let mut arpeggiators: [Box<dyn Arpeggiator>; midi::CHANNELS] = [
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch1, self.output_device_is_input_device), //TODO ideally loop
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch2, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch3, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch4, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch5, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch6, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch7, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch8, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch9, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch10, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch11, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch12, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch13, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch14, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch15, self.output_device_is_input_device),
-            create_arpeggiator(default_settings, &self.midi_out, Channel::Ch16, self.output_device_is_input_device)
-        ];
+        let mut arpeggiators: [Box<dyn Arpeggiator>; midi::CHANNELS] = array::from_fn(|ch| create_arpeggiator(default_settings, &self.midi_out, Channel::from_index(ch.try_into().unwrap()).unwrap(), self.output_device_is_input_device));
         
         loop {
             // read next midi message

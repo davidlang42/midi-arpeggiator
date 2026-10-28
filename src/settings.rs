@@ -2,14 +2,17 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 
-use wmidi::{MidiMessage, ControlFunction};
+use wmidi::{ControlFunction, MidiMessage, Note, U7};
 
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggiator::{Pattern, ArpeggiatorMode};
 use crate::midi::MidiReceiver;
 use crate::presets::Preset;
+use crate::notename::NoteName;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+use serde::Deserialize;
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct Settings {
     pub finish_pattern: bool,
     pub fixed_velocity: Option<u8>,
@@ -20,7 +23,11 @@ pub struct Settings {
     pub double_notes: Option<Vec<i8>>,
     pub presets: Option<Vec<Preset>>,
     pub max_repeats: Option<usize>,
-    pub use_pedal: Option<bool>
+    pub use_pedal: Option<bool>,
+    #[serde(deserialize_with = "deserialize_midi_file", default, rename = "midi_file")]
+    pub midi_notes: Option<Vec<MidiNoteEvent>>,
+    pub start_key: Option<NoteName>,
+    pub stop_key: Option<NoteName>,
 }
 
 impl Settings {
@@ -35,7 +42,10 @@ impl Settings {
             double_notes: None,
             presets: None,
             max_repeats: None,
-            use_pedal: None
+            use_pedal: None,
+            midi_notes: None,
+            start_key: None,
+            stop_key: None,
         }
     }
 
@@ -177,5 +187,77 @@ impl<'a> MidiReceiver for ProgramChanger<'a> {
             },
             _ => Some(message)
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MidiNoteEvent {
+    pub tick: u64,
+    pub note: Note,
+    pub velocity: U7,
+    pub is_on: bool,
+}
+
+fn deserialize_midi_file<'de, D>(deserializer: D) -> Result<Option<Vec<MidiNoteEvent>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let path: Option<String> = Option::deserialize(deserializer)?;
+    if let Some(p) = path {
+        let bytes = fs::read(&p).map_err(serde::de::Error::custom)?;
+        let smf = midly::Smf::parse(&bytes).map_err(serde::de::Error::custom)?;
+        let file_ppq = match smf.header.timing {
+            midly::Timing::Metrical(tpq) => tpq.as_int() as u64,
+            _ => 96,
+        };
+
+        let mut events = Vec::new();
+        for track in smf.tracks {
+            let mut current_tick: u64 = 0;
+            for event in track {
+                current_tick += event.delta.as_int() as u64;
+                let clock_tick = (current_tick * 24 + file_ppq / 2) / file_ppq;
+
+                match event.kind {
+                    midly::TrackEventKind::Midi { message, .. } => {
+                        match message {
+                            midly::MidiMessage::NoteOn { key, vel } => {
+                                let velocity = vel.as_int();
+                                let note = Note::from_u8_lossy(key.as_int());
+                                if velocity > 0 {
+                                    events.push(MidiNoteEvent {
+                                        tick: clock_tick,
+                                        note,
+                                        velocity: U7::from_u8_lossy(velocity),
+                                        is_on: true,
+                                    });
+                                } else {
+                                    events.push(MidiNoteEvent {
+                                        tick: clock_tick,
+                                        note,
+                                        velocity: U7::from_u8_lossy(64),
+                                        is_on: false,
+                                    });
+                                }
+                            }
+                            midly::MidiMessage::NoteOff { key, vel } => {
+                                events.push(MidiNoteEvent {
+                                    tick: clock_tick,
+                                    note: Note::from_u8_lossy(key.as_int()),
+                                    velocity: U7::from_u8_lossy(vel.as_int()),
+                                    is_on: false,
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        events.sort_by_key(|e| e.tick);
+        Ok(Some(events))
+    } else {
+        Ok(None)
     }
 }

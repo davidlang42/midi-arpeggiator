@@ -1,18 +1,15 @@
-use wmidi::{Channel, MidiMessage, Note, Velocity, U7};
-use std::collections::HashSet;
+use wmidi::{Channel, MidiMessage, U7};
 use std::error::Error;
 use std::mem;
-use std::sync::mpsc;
-use crate::arpeggiator::Pattern;
-use crate::midi;
+
+use super::{Pattern, Arpeggiator};
+use crate::midi::{OutputDevice};
 use crate::arpeggio::full_length::{Arpeggio, Player};
-use crate::presets::Preset;
 use crate::settings::Settings;
 use crate::status::StatusSignal;
-use super::Arpeggiator;
 
-pub struct EvenMutator<'a> {
-    midi_out: &'a midi::OutputDevice,
+pub struct EvenMutator<'a> { //NOTE: this should be in synced, but currently uses dedicated arpeggio type
+    midi_out: &'a OutputDevice,
     channel_out: Channel,
     arpeggio: State,
     // from Settings:
@@ -29,7 +26,9 @@ enum State {
 }
 
 impl<'a> EvenMutator<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
+    const START_THRESHOLD_TICKS: u8 = 2;
+    
+    pub fn new(midi_out: &'a OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
         Self {
             midi_out,
             channel_out,
@@ -41,8 +40,6 @@ impl<'a> EvenMutator<'a> {
         }
     }
 }
-
-const START_THRESHOLD_TICKS: u8 = 2;
 
 // NOTE: EvenMutator does not support sustain pedal (but could in the future)
 impl<'a> Arpeggiator for EvenMutator<'a> {
@@ -57,7 +54,7 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
                 match &mut self.arpeggio {
                     State::Playing(player) => player.note_on(n, v),
                     State::Starting(arp, _) => arp.note_on(n, v),
-                    State::None => self.arpeggio = State::Starting(Arpeggio::from(n, v, self.fixed_steps.unwrap_or(1), self.pattern), START_THRESHOLD_TICKS)
+                    State::None => self.arpeggio = State::Starting(Arpeggio::from(n, v, self.fixed_steps.unwrap_or(1), self.pattern), Self::START_THRESHOLD_TICKS)
                 };
             },
             MidiMessage::NoteOff(_, n, _) => {
@@ -115,91 +112,5 @@ impl<'a> Arpeggiator for EvenMutator<'a> {
         } else {
             0
         }
-    }
-}
-
-pub struct TriggeredChords<'a> {
-    midi_out: &'a midi::OutputDevice,
-    channel_out: Channel,
-    not_playing: HashSet<Preset>,
-    notes: HashSet<Note>,
-    playing: HashSet<Preset>,
-    // from Settings:
-    fixed_velocity: Option<u8>,
-}
-
-impl<'a> TriggeredChords<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
-        Self {
-            midi_out,
-            channel_out,
-            not_playing: HashSet::from_iter(settings.presets.clone().unwrap_or_else(|| Vec::new())), // not helpful if presets is missing, but better than crashing
-            notes: HashSet::new(),
-            playing: HashSet::new(),
-            fixed_velocity: settings.fixed_velocity,
-        }
-    }
-}
-
-impl<'a> TriggeredChords<'a> {
-    fn play(&self, midi_out: &midi::OutputDevice, preset: &Preset, velocity: &Velocity) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
-        for n in preset.steps.iter() {
-            let message = MidiMessage::NoteOn(self.channel_out, n.into(), *velocity);
-            midi_out.send(message)?;
-        }
-        Ok(())
-    }
-
-    fn stop(&self, midi_out: &midi::OutputDevice, preset: &Preset) -> Result<(), mpsc::SendError<MidiMessage<'static>>> {
-        for n in preset.steps.iter() {
-            let message = MidiMessage::NoteOff(self.channel_out, n.into(), U7::MIN);
-            midi_out.send(message)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'a> Arpeggiator for TriggeredChords<'a> {
-    fn process(&mut self, received: MidiMessage<'static>, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
-        match received {
-            MidiMessage::NoteOn(_, n, mut v) => {
-                self.notes.insert(n);
-                let should_play: Vec<Preset> = self.not_playing.iter().filter(|p| p.is_triggered_by(&self.notes)).cloned().collect();
-                if let Some(fixed_v) = self.fixed_velocity {
-                    v = U7::from_u8_lossy(fixed_v);
-                }
-                for p in should_play {
-                    self.not_playing.remove(&p);
-                    self.play(self.midi_out, &p, &v)?;
-                    self.playing.insert(p);
-                    status.reset_beat(self.channel_out);
-                }
-            },
-            MidiMessage::NoteOff(_, n, _) => {
-                self.notes.remove(&n);
-                let should_stop: Vec<Preset> = self.playing.iter().filter(|p| !p.is_triggered_by(&self.notes)).cloned().collect();
-                for p in should_stop {
-                    self.playing.remove(&p);
-                    self.stop(self.midi_out, &p)?;
-                    self.not_playing.insert(p);
-                }
-            },
-            _ => {}
-        };
-        status.update_count(self.channel_out, self.count_arpeggios());
-        Ok(())
-    }
-
-    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
-        let drained_items: Vec<_> = self.playing.drain().collect();
-        for p in drained_items {
-            self.stop(self.midi_out, &p)?;
-            self.not_playing.insert(p);
-        }
-        Ok(())
-    }
-
-    fn count_arpeggios(&self) -> usize {
-        self.playing.len()
     }
 }
