@@ -89,7 +89,6 @@ impl Arpeggio {
     }
 }
 
-
 pub struct Player {
     thread: JoinHandle<Result<(), mpsc::SendError<MidiMessage<'static>>>>,
     should_stop: Arc<AtomicBool>

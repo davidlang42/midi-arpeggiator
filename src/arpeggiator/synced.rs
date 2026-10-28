@@ -3,17 +3,18 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::mem;
 use std::time::Instant;
-use crate::arpeggiator::Pattern;
-use crate::midi;
+
+use super::{Arpeggiator, Pattern};
+use crate::midi::OutputDevice;
 use crate::arpeggio::{NoteDetails, Step};
 use crate::arpeggio::synced::{Arpeggio, Player};
 use crate::presets::Preset;
-use crate::settings::Settings;
+use crate::notename::NoteName;
+use crate::settings::{Settings, MidiNoteEvent};
 use crate::status::StatusSignal;
-use super::Arpeggiator;
 
 pub struct PressHold<'a> {
-    midi_out: &'a midi::OutputDevice,
+    midi_out: &'a OutputDevice,
     channel_out: Channel,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     pedal_notes_off: HashSet<Note>,
@@ -32,7 +33,7 @@ pub struct PressHold<'a> {
 impl<'a> PressHold<'a> {
     const TRIGGER_TIME_MS: u128 = 50;
 
-    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
+    pub fn new(midi_out: &'a OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
         Self {
             midi_out,
             channel_out,
@@ -131,7 +132,7 @@ impl<'a> Arpeggiator for PressHold<'a> {
 }
 
 pub struct MutatingHold<'a> {
-    midi_out: &'a midi::OutputDevice,
+    midi_out: &'a OutputDevice,
     channel_out: Channel,
     held_notes: Vec<NoteDetails>,
     changed: bool,
@@ -146,7 +147,7 @@ pub struct MutatingHold<'a> {
 }
 
 impl<'a> MutatingHold<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
+    pub fn new(midi_out: &'a OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
         Self {
             midi_out,
             channel_out,
@@ -281,7 +282,7 @@ fn drain_and_force_stop_map<N>(arpeggios: &mut HashMap<N, Player>) -> Result<(),
 }
 
 pub struct PedalRecorder<'a> {
-    midi_out: &'a midi::OutputDevice,
+    midi_out: &'a OutputDevice,
     channel_out: Channel,
     notes: Vec<(Instant, NoteDetails)>,
     ticks_since_last_note: usize,
@@ -297,7 +298,7 @@ pub struct PedalRecorder<'a> {
 }
 
 impl<'a> PedalRecorder<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
+    pub fn new(midi_out: &'a OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
         Self {
             midi_out,
             channel_out,
@@ -417,7 +418,7 @@ impl<'a> Arpeggiator for PedalRecorder<'a> {
 }
 
 pub struct PrerecordedSets<'a> {
-    midi_out: &'a midi::OutputDevice,
+    midi_out: &'a OutputDevice,
     channel_out: Channel,
     presets: Vec<Preset>,
     notes: HashSet<Note>,
@@ -434,7 +435,7 @@ pub struct PrerecordedSets<'a> {
 }
 
 impl<'a> PrerecordedSets<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
+    pub fn new(midi_out: &'a OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
         Self {
             midi_out,
             channel_out,
@@ -520,5 +521,115 @@ impl<'a> Arpeggiator for PrerecordedSets<'a> {
         } else {
             0
         }
+    }
+}
+
+pub struct MidiLoop<'a> {
+    midi_out: &'a OutputDevice,
+    channel_out: Channel,
+    playing: bool,
+    internal_tick_counter: u64,
+    event_index: usize,
+    active_notes: HashSet<Note>,
+    midi_events: Vec<MidiNoteEvent>,
+    max_tick: u64,
+    start_key: Option<NoteName>,
+    stop_key: Option<NoteName>,
+    fixed_velocity: Option<u8>,
+}
+
+impl<'a> MidiLoop<'a> {
+    pub fn new(midi_out: &'a OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
+        let midi_events = settings.midi_notes.clone().unwrap_or_else(|| Vec::new()); // not helpful if midi_notes is missing, but better than crashing
+        let max_tick = midi_events.last().map_or(0, |e| e.tick);
+        Self {
+            midi_out,
+            channel_out,
+            playing: false,
+            internal_tick_counter: 0,
+            event_index: 0,
+            active_notes: HashSet::new(),
+            midi_events,
+            max_tick,
+            start_key: settings.start_key,
+            stop_key: settings.stop_key,
+            fixed_velocity: settings.fixed_velocity,
+        }
+    }
+
+    fn turn_off_all_active_notes(&mut self) -> Result<(), Box<dyn Error>> {
+        for note in &self.active_notes {
+            self.midi_out.send(MidiMessage::NoteOff(self.channel_out, *note, U7::MIN))?;
+        }
+        self.active_notes.clear();
+        Ok(())
+    }
+}
+
+impl<'a> Arpeggiator for MidiLoop<'a> {
+    fn process(&mut self, received: MidiMessage<'static>, status: &mut dyn StatusSignal) -> Result<(), Box<dyn Error>> {
+        match received {
+            MidiMessage::NoteOn(_, n, _) => {
+                let matches_start = if let Some(start_note) = &self.start_key {
+                    <&NoteName as Into<Note>>::into(start_note) == n
+                } else {
+                    true
+                };
+                let matches_stop = if let Some(stop_note) = &self.stop_key {
+                    <&NoteName as Into<Note>>::into(stop_note) == n
+                } else {
+                    true
+                };
+                if self.playing && matches_stop {
+                    self.playing = false;
+                    self.turn_off_all_active_notes()?;
+                    status.update_count(self.channel_out, self.count_arpeggios());
+                } else if !self.playing && matches_start {
+                    self.playing = true;
+                    status.update_count(self.channel_out, self.count_arpeggios());
+                    status.reset_beat(self.channel_out);
+                }
+            }
+            MidiMessage::TimingClock => {
+                if self.playing {
+                    while self.event_index < self.midi_events.len() && self.midi_events[self.event_index].tick == self.internal_tick_counter {
+                        let ev = &self.midi_events[self.event_index];
+                        if ev.is_on {
+                            let vel = U7::from_u8_lossy(self.fixed_velocity.unwrap_or(ev.velocity.into()));
+                            self.midi_out.send(MidiMessage::NoteOn(self.channel_out, ev.note, vel))?;
+                            self.active_notes.insert(ev.note);
+                        } else {
+                            self.midi_out.send(MidiMessage::NoteOff(self.channel_out, ev.note, U7::MIN))?;
+                            self.active_notes.remove(&ev.note);
+                        }
+                        self.event_index += 1;
+                    }
+
+                    if self.internal_tick_counter == self.max_tick {
+                        self.internal_tick_counter = 0;
+                        self.event_index = 0;
+                    } else {
+                        self.internal_tick_counter += 1;
+                    }
+                }
+            }
+            MidiMessage::Reset => {
+                self.internal_tick_counter = 0;
+                self.event_index = 0;
+                self.stop_arpeggios()?;
+                status.update_count(self.channel_out, self.count_arpeggios());
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn stop_arpeggios(&mut self) -> Result<(), Box<dyn Error>> {
+        self.playing = false;
+        self.turn_off_all_active_notes()
+    }
+
+    fn count_arpeggios(&self) -> usize {
+        if self.playing { 1 } else { 0 }
     }
 }

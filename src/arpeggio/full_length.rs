@@ -2,7 +2,7 @@ use std::{sync::mpsc, error::Error};
 use std::fmt;
 use wmidi::{Channel, MidiMessage, Note, Velocity, U7};
 use crate::arpeggiator::Pattern;
-use crate::midi::{self, MidiOutput, TICKS_PER_BEAT};
+use crate::midi::{MidiOutput, OutputDevice, TICKS_PER_BEAT};
 
 const NOTE_MAX: usize = 127;
 
@@ -53,7 +53,7 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn init(arpeggio: Arpeggio, midi_out: &midi::OutputDevice, channel_out: Channel, doubling: &Option<Vec<i8>>) -> Self {
+    pub fn init(arpeggio: Arpeggio, midi_out: &OutputDevice, channel_out: Channel, doubling: &Option<Vec<i8>>) -> Self {
         Self {
             arpeggio,
             channel_out,

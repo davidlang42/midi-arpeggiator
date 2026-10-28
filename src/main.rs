@@ -82,11 +82,11 @@ fn wait_for_midi_devices<SC: SettingsChanger, SS: StatusSignal>(required_devices
         }
         status.waiting_for_midi_clock();
         if devices.len() == 1 {
-            run_and_print(&devices[0], &devices[0], settings_changer.clone(), &mut status); //TODO avoid clone
+            run_and_print(&devices[0], &devices[0], settings_changer.clone(), &mut status);
         } else if ClockDevice::init(&devices[0]).is_ok() {
-            run_and_print(&devices[1], &devices[0], settings_changer.clone(), &mut status); //TODO avoid clone
+            run_and_print(&devices[1], &devices[0], settings_changer.clone(), &mut status);
         } else if ClockDevice::init(&devices[1]).is_ok() {
-            run_and_print(&devices[0], &devices[1], settings_changer.clone(), &mut status); //TODO avoid clone
+            run_and_print(&devices[0], &devices[1], settings_changer.clone(), &mut status);
         }
     }
 }

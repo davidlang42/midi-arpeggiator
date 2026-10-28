@@ -3,15 +3,16 @@ use std::error::Error;
 use std::mem;
 use std::time::Instant;
 use wmidi::{Channel, Note, MidiMessage, ControlFunction};
+
 use crate::status::StatusSignal;
-use crate::midi;
+use crate::midi::OutputDevice;
 use crate::arpeggio::NoteDetails;
 use crate::arpeggio::timed::{Arpeggio, Player};
 use crate::settings::Settings;
 use super::Arpeggiator;
 
 pub struct RepeatRecorder<'a> {
-    midi_out: &'a midi::OutputDevice,
+    midi_out: &'a OutputDevice,
     channel_out: Channel,
     held_notes: HashMap<Note, (Instant, NoteDetails)>,
     last_note_off: Option<(Instant, NoteDetails)>,
@@ -23,7 +24,7 @@ pub struct RepeatRecorder<'a> {
 }
 
 impl<'a> RepeatRecorder<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
+    pub fn new(midi_out: &'a OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
         Self {
             midi_out,
             channel_out,
@@ -86,7 +87,7 @@ impl<'a> Arpeggiator for RepeatRecorder<'a> {
 }
 
 pub struct PedalRecorder<'a> {
-    midi_out: &'a midi::OutputDevice,
+    midi_out: &'a OutputDevice,
     channel_out: Channel,
     notes: Vec<(Instant, NoteDetails)>,
     thru_notes: HashMap<Note, NoteDetails>,
@@ -100,7 +101,7 @@ pub struct PedalRecorder<'a> {
 }
 
 impl<'a> PedalRecorder<'a> {
-    pub fn new(midi_out: &'a midi::OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
+    pub fn new(midi_out: &'a OutputDevice, channel_out: Channel, settings: &Settings) -> Self {
         Self {
             midi_out,
             channel_out,
