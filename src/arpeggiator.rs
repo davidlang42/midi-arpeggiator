@@ -92,7 +92,7 @@ pub enum ArpeggiatorMode {
 
 fn create_arpeggiator<'a>(settings: &Settings, midi_out: &'a OutputDevice, channel_out: Channel, output_device_is_input_device: bool) -> Box<dyn Arpeggiator + 'a> {
     match settings.mode {
-        ArpeggiatorMode::Passthrough => Box::new(Passthrough::new(midi_out, output_device_is_input_device, settings)),
+        ArpeggiatorMode::Passthrough => Box::new(Passthrough::new(midi_out, output_device_is_input_device, settings)), // doesn't respect channel_out, always passes through input channel
         ArpeggiatorMode::MutatingHold => Box::new(synced::MutatingHold::new(midi_out, channel_out, settings)),
         ArpeggiatorMode::PressHold => Box::new(synced::PressHold::new(midi_out, channel_out, settings)),
         ArpeggiatorMode::TimedPedalRecorder => Box::new(timed::PedalRecorder::new(midi_out, channel_out, settings)),
