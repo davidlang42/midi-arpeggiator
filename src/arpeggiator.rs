@@ -168,9 +168,11 @@ impl<'a, SC: SettingsChanger, SS: StatusSignal> MultiArpeggiator<'a, SC, SS> {
                 if m.is_none() { continue; }
                 arpeggiators[index].process(m.unwrap(), self.status)?;
             } else {
-                // broadcast system/global messages (like TimingClock, Reset, etc.) only to arpeggiators
-                for arpeggiator in &mut arpeggiators {
-                    arpeggiator.process(message.clone(), self.status)?;
+                // process system/global messages (like TimingClock, Reset, etc.) to status -> all arpeggiators
+                if let Some(broadcast) = self.status.passthrough_midi(message) {
+                    for arpeggiator in &mut arpeggiators {
+                        arpeggiator.process(broadcast.clone(), self.status)?;
+                    }
                 }
             }
         }

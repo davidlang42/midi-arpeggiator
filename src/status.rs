@@ -112,11 +112,12 @@ impl<W: Write> StatusSignal for TextStatus<W> {
 #[allow(dead_code)]
 pub struct LedStatus<const N: usize> {
     driver: Ws2812Rpi,
-    tick: usize,
-    running: bool, // runs green if true, red if false
-    fixed_steps: Option<usize>, // bar graph from 0 in white
-    pattern: Option<Pattern>, // sets run direction
-    waiting: Option<(WaitFor, usize)>
+    tick: [usize; midi::CHANNELS],
+    count: [usize; midi::CHANNELS], // runs green if true, red if false
+    fixed_steps: [Option<usize>; midi::CHANNELS], // bar graph from 0 in white
+    pattern: [Option<Pattern>; midi::CHANNELS], // sets run direction
+    waiting: Option<(WaitFor, usize)>,
+    last_index_updated: usize
 }
 
 #[allow(dead_code)]
@@ -124,11 +125,12 @@ impl<const N: usize> LedStatus<N> {
     pub fn new(pin: u8) -> Self {
         let mut status = Self {
             driver: Ws2812Rpi::new(N as i32, pin as i32).unwrap(),
-            tick: 0,
-            running: false,
-            fixed_steps: None,
-            pattern: None,
-            waiting: None
+            tick: [0; midi::CHANNELS],
+            count: [0; midi::CHANNELS],
+            fixed_steps: [None; midi::CHANNELS],
+            pattern: [None; midi::CHANNELS],
+            waiting: None,
+            last_index_updated: 0
         };
         status.update_leds();
         status
@@ -136,24 +138,24 @@ impl<const N: usize> LedStatus<N> {
 
     fn update_leds(&mut self) {
         let mut data: [RGB8; N] = [RGB8::default(); N];
-        if let Some(steps) = self.fixed_steps {
+        if let Some(steps) = self.fixed_steps[self.last_index_updated] {
             for i in 0..min(data.len(), steps) {
                 data[i] = RGB8::new(16, 16, 16); // white
             }
         }
-        if let Some(pattern) = self.pattern {
-            let progress = self.tick * data.len() / midi::TICKS_PER_BEAT;
+        if let Some(pattern) = self.pattern[self.last_index_updated] {
+            let progress = self.tick[self.last_index_updated] * data.len() / midi::TICKS_PER_BEAT;
             let index = match pattern {
                 Pattern::Up => progress,
                 Pattern::Down => data.len() - progress - 1
             };
-            data[index] = if self.running {
+            data[index] = if self.count[self.last_index_updated] > 0 {
                 RGB8::new(0, 64, 0) // green if arp running
             } else {
                 RGB8::new(64, 0, 0) // red if arp stopped
             };
         } else {
-            if self.tick < midi::TICKS_PER_BEAT / 2 {
+            if self.tick[self.last_index_updated] < midi::TICKS_PER_BEAT / 2 {
                 for i in 0..data.len() {
                     data[i] = RGB8::new(0, 0, 16); // blue for passthrough mode
                 }
@@ -190,10 +192,12 @@ impl<const N: usize> LedStatus<N> {
 impl<const N: usize> MidiReceiver for LedStatus<N> {
     fn passthrough_midi(&mut self, message: wmidi::MidiMessage<'static>) -> Option<wmidi::MidiMessage<'static>> {
         if let MidiMessage::TimingClock = message {
-            if self.tick == midi::TICKS_PER_BEAT - 1 {
-                self.tick = 0;
-            } else {
-                self.tick += 1;
+            for i in 0..self.tick.len() {
+                if self.tick[i] == midi::TICKS_PER_BEAT - 1 {
+                    self.tick[i] = 0;
+                } else {
+                    self.tick[i] += 1;
+                }
             }
             self.update_leds();
         }
@@ -202,23 +206,33 @@ impl<const N: usize> MidiReceiver for LedStatus<N> {
 }
 
 impl<const N: usize> StatusSignal for LedStatus<N> {
-    fn update_settings(&mut self, _channel: Channel, settings: &Settings) {
+    fn update_settings(&mut self, channel: Channel, settings: &Settings) {
         self.clear_wait();
+        let index = channel.index() as usize;
         if settings.mode == ArpeggiatorMode::Passthrough {
-            self.fixed_steps = None;
-            self.pattern = None;
+            self.fixed_steps[index] = None;
+            self.pattern[index] = None;
         } else {
-            self.fixed_steps = settings.fixed_steps;
-            self.pattern = Some(settings.pattern);
+            self.fixed_steps[index] = settings.fixed_steps;
+            self.pattern[index] = Some(settings.pattern);
+        }
+        self.last_index_updated = index;
+    }
+
+    fn update_count(&mut self, channel: Channel, arpeggios: usize) {
+        let index = channel.index() as usize;
+        if self.count[index] != arpeggios {
+            self.count[index] = arpeggios;
+            self.last_index_updated = index;
         }
     }
 
-    fn update_count(&mut self, _channel: Channel, arpeggios: usize) {
-        self.running = arpeggios > 0;
-    }
-
-    fn reset_beat(&mut self, _channel: Channel) {
-        self.tick = 0;
+    fn reset_beat(&mut self, channel: Channel) {
+        let index = channel.index() as usize;
+        if self.tick[index] != 0 {
+            self.tick[index] = 0;
+            self.last_index_updated = index;
+        }
     }
     
     fn waiting_for_midi_connect(&mut self) {
